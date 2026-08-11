@@ -5,15 +5,23 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $root 'dist'
-$originalAppData = $env:APPDATA
-$runId = "swayforge-package-smoke-$PID-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-$appDataRoot = Join-Path $env:RUNNER_TEMP $runId
+$appDataRoot = $env:APPDATA
+
+if (-not $appDataRoot -or -not (Test-Path $appDataRoot)) {
+  throw 'Windows APPDATA is unavailable; packaged persistence cannot be verified safely.'
+}
 
 function Find-SwayForgeWorkspace {
-  $matches = @(Get-ChildItem -Path $appDataRoot -Recurse -File -Filter 'workspace.json' -ErrorAction SilentlyContinue)
+  $matches = @(
+    Get-ChildItem -Path $appDataRoot -Directory -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        $candidate = Join-Path $_.FullName 'data\workspace.json'
+        if (Test-Path $candidate) { Get-Item $candidate }
+      }
+  )
   if ($matches.Count -gt 1) {
     $paths = ($matches | ForEach-Object { $_.FullName }) -join ', '
-    throw "Packaged SwayForge created more than one workspace under the isolated APPDATA root: $paths"
+    throw "Packaged verification found more than one app-level data/workspace.json beneath APPDATA: $paths"
   }
   if ($matches.Count -eq 1) {
     return $matches[0].FullName
@@ -40,10 +48,12 @@ function Start-And-VerifySwayForge([string]$Executable, [string]$Label) {
     }
 
     if (-not $workspacePath) {
-      throw "$Label remained open but did not initialise workspace state beneath the isolated APPDATA root."
+      throw "$Label remained open but did not initialise app-level data/workspace.json beneath Windows APPDATA."
     }
+
+    Start-Sleep -Seconds 2
     if ($process.HasExited) {
-      throw "$Label exited unexpectedly after initialisation (exit code $($process.ExitCode))."
+      throw "$Label exited unexpectedly after local workspace initialisation (exit code $($process.ExitCode))."
     }
     return $workspacePath
   }
@@ -56,9 +66,6 @@ function Start-And-VerifySwayForge([string]$Executable, [string]$Label) {
 }
 
 try {
-  New-Item -ItemType Directory -Path $appDataRoot -Force | Out-Null
-  $env:APPDATA = $appDataRoot
-
   if (-not $Installer) {
     $unpackedExe = Join-Path $dist 'win-unpacked\SwayForge.exe'
     $workspacePath = Start-And-VerifySwayForge $unpackedExe 'Unpacked SwayForge'
@@ -119,7 +126,4 @@ catch {
   $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
   Write-Output "::error file=scripts/smoke-packaged-windows.ps1,title=Windows packaged smoke failed::$message"
   throw
-}
-finally {
-  $env:APPDATA = $originalAppData
 }
