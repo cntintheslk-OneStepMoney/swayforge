@@ -1,31 +1,33 @@
 'use strict';
 
-module.exports = Object.freeze({
+// electron-builder normalises portions of this configuration in place, so this
+// adapter must remain mutable. Repository policy tests enforce the values below.
+module.exports = {
   appId: 'app.swayforge.desktop',
   productName: 'SwayForge',
   asar: true,
   compression: 'normal',
-  directories: Object.freeze({
+  directories: {
     output: 'dist',
     buildResources: 'build'
-  }),
-  files: Object.freeze([
+  },
+  files: [
     'package.json',
     'src/**/*'
-  ]),
+  ],
   artifactName: '${productName}-${version}-win-${arch}.${ext}',
-  win: Object.freeze({
-    target: Object.freeze([
-      Object.freeze({
+  win: {
+    target: [
+      {
         target: 'nsis',
-        arch: Object.freeze(['x64'])
-      })
-    ]),
+        arch: ['x64']
+      }
+    ],
     executableName: 'SwayForge',
     icon: 'build/icon.svg',
     forceCodeSigning: false
-  }),
-  nsis: Object.freeze({
+  },
+  nsis: {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
@@ -35,5 +37,5 @@ module.exports = Object.freeze({
     uninstallDisplayName: 'SwayForge',
     deleteAppDataOnUninstall: false,
     artifactName: '${productName}-${version}-win-${arch}-setup.${ext}'
-  })
-});
+  }
+};
