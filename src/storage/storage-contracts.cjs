@@ -3,7 +3,11 @@
 const CURRENT_SCHEMA_VERSION = 1;
 const PROJECT_SCHEMA_VERSION = 1;
 const APPLICATION_SCHEMA_VERSION = 1;
+const MEDIA_SCHEMA_VERSION = 1;
 const PROJECT_STATUSES = Object.freeze(['draft', 'archived']);
+const MEDIA_KINDS = Object.freeze(['image', 'video']);
+const MEDIA_AVAILABILITY_STATES = Object.freeze(['ready']);
+const MEDIA_IMPORT_MODES = Object.freeze(['managed-copy']);
 
 const STORAGE_IPC_CHANNELS = Object.freeze({
   applicationStateRead: 'swayforge:storage:application-state:read',
@@ -17,12 +21,15 @@ const STORAGE_IPC_CHANNELS = Object.freeze({
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MEDIA_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const MANAGED_REFERENCE_PATTERN = /^files\/[0-9a-f-]{36}\.(?:jpg|png|mp4|mov)$/i;
 const PROJECT_TITLE_LIMIT = 160;
 const RECENT_PROJECT_LIMIT = 50;
 const MAX_JSON_DEPTH = 12;
 const MAX_JSON_ARRAY_LENGTH = 10000;
 const MAX_JSON_OBJECT_KEYS = 2000;
 const MAX_JSON_STRING_LENGTH = 250000;
+const MAX_MEDIA_FILE_SIZE = 16 * 1024 * 1024 * 1024;
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -62,6 +69,13 @@ function assertProjectId(value, label = 'projectId') {
 function assertMediaId(value) {
   if (typeof value !== 'string' || !MEDIA_ID_PATTERN.test(value)) {
     throw new TypeError('mediaId is invalid.');
+  }
+  return value;
+}
+
+function assertManagedMediaId(value) {
+  if (typeof value !== 'string' || !UUID_PATTERN.test(value)) {
+    throw new TypeError('managed media id is invalid.');
   }
   return value;
 }
@@ -130,6 +144,81 @@ function validateMediaIds(value) {
   return [...value];
 }
 
+function validateNullableDimension(value, label) {
+  if (value === null) return;
+  if (!Number.isSafeInteger(value) || value <= 0 || value > 100000) {
+    throw new TypeError(`${label} is invalid.`);
+  }
+}
+
+function validateMediaRecord(media) {
+  assertExactKeys(
+    media,
+    [
+      'id',
+      'schemaVersion',
+      'kind',
+      'originalFilename',
+      'managedReference',
+      'fileSize',
+      'sha256',
+      'importedAt',
+      'importMode',
+      'width',
+      'height',
+      'durationSeconds',
+      'container',
+      'codec',
+      'availability'
+    ],
+    'media record'
+  );
+  assertManagedMediaId(media.id);
+  if (media.schemaVersion !== MEDIA_SCHEMA_VERSION) throw new TypeError('Unsupported media schema version.');
+  if (!MEDIA_KINDS.includes(media.kind)) throw new TypeError('media kind is invalid.');
+  if (
+    typeof media.originalFilename !== 'string' ||
+    media.originalFilename.length === 0 ||
+    media.originalFilename.length > 255 ||
+    /[\\/\0]/.test(media.originalFilename)
+  ) {
+    throw new TypeError('originalFilename is invalid.');
+  }
+  if (
+    typeof media.managedReference !== 'string' ||
+    !MANAGED_REFERENCE_PATTERN.test(media.managedReference) ||
+    !media.managedReference.includes(media.id)
+  ) {
+    throw new TypeError('managedReference is invalid.');
+  }
+  if (!Number.isSafeInteger(media.fileSize) || media.fileSize <= 0 || media.fileSize > MAX_MEDIA_FILE_SIZE) {
+    throw new TypeError('media fileSize is invalid.');
+  }
+  if (typeof media.sha256 !== 'string' || !SHA256_PATTERN.test(media.sha256)) {
+    throw new TypeError('media sha256 is invalid.');
+  }
+  assertIsoTimestamp(media.importedAt, 'media importedAt');
+  if (!MEDIA_IMPORT_MODES.includes(media.importMode)) throw new TypeError('media importMode is invalid.');
+  validateNullableDimension(media.width, 'media width');
+  validateNullableDimension(media.height, 'media height');
+  if (
+    media.durationSeconds !== null &&
+    (typeof media.durationSeconds !== 'number' ||
+      !Number.isFinite(media.durationSeconds) ||
+      media.durationSeconds < 0 ||
+      media.durationSeconds > 86400)
+  ) {
+    throw new TypeError('media durationSeconds is invalid.');
+  }
+  for (const field of ['container', 'codec']) {
+    if (media[field] !== null && (typeof media[field] !== 'string' || media[field].length > 64)) {
+      throw new TypeError(`media ${field} is invalid.`);
+    }
+  }
+  if (!MEDIA_AVAILABILITY_STATES.includes(media.availability)) throw new TypeError('media availability is invalid.');
+  return media;
+}
+
 function validateApplicationState(application) {
   assertExactKeys(
     application,
@@ -176,7 +265,7 @@ function validateProject(project) {
 }
 
 function validateDocument(document) {
-  assertExactKeys(document, ['schemaVersion', 'revision', 'createdAt', 'updatedAt', 'application', 'projects'], 'store');
+  assertExactKeys(document, ['schemaVersion', 'revision', 'createdAt', 'updatedAt', 'application', 'projects', 'media'], 'store');
   if (document.schemaVersion !== CURRENT_SCHEMA_VERSION) throw new TypeError('Unsupported store schema version.');
   assertRevision(document.revision);
   assertIsoTimestamp(document.createdAt, 'store createdAt');
@@ -187,6 +276,17 @@ function validateDocument(document) {
     assertProjectId(projectId);
     validateProject(project);
     if (project.id !== projectId) throw new TypeError('project key does not match project id.');
+  }
+  if (document.media !== undefined) {
+    if (!isPlainObject(document.media)) throw new TypeError('media must be an object.');
+    const hashes = new Set();
+    for (const [mediaId, media] of Object.entries(document.media)) {
+      assertManagedMediaId(mediaId);
+      validateMediaRecord(media);
+      if (media.id !== mediaId) throw new TypeError('media key does not match media id.');
+      if (hashes.has(media.sha256)) throw new TypeError('media content hashes must be unique.');
+      hashes.add(media.sha256);
+    }
   }
   const knownProjectIds = new Set(Object.keys(document.projects));
   if (document.application.selectedProjectId && !knownProjectIds.has(document.application.selectedProjectId)) {
@@ -237,6 +337,12 @@ function validateCreateProjectRequest(value) {
   return value;
 }
 
+function validateRendererCreateProjectRequest(value) {
+  validateCreateProjectRequest(value);
+  if ('mediaIds' in value) throw new TypeError('Renderer project creation must attach media through the media service.');
+  return value;
+}
+
 function validateProjectReadRequest(value) {
   assertExactKeys(value, ['projectId'], 'project read request');
   assertProjectId(value.projectId);
@@ -261,6 +367,12 @@ function validateUpdateProjectRequest(value) {
   return value;
 }
 
+function validateRendererUpdateProjectRequest(value) {
+  validateUpdateProjectRequest(value);
+  if ('mediaIds' in value.patch) throw new TypeError('Renderer project updates must attach media through the media service.');
+  return value;
+}
+
 function validateArchiveProjectRequest(value) {
   assertExactKeys(value, ['projectId', 'expectedRevision'], 'project archive request');
   assertProjectId(value.projectId);
@@ -271,9 +383,12 @@ function validateArchiveProjectRequest(value) {
 module.exports = {
   APPLICATION_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
+  MEDIA_SCHEMA_VERSION,
+  MAX_MEDIA_FILE_SIZE,
   PROJECT_SCHEMA_VERSION,
   PROJECT_STATUSES,
   STORAGE_IPC_CHANNELS,
+  assertManagedMediaId,
   assertProjectId,
   assertRevision,
   assertSafeJsonValue,
@@ -285,7 +400,10 @@ module.exports = {
   validateCreateProjectRequest,
   validateDocument,
   validateMediaIds,
+  validateMediaRecord,
   validateProject,
   validateProjectReadRequest,
+  validateRendererCreateProjectRequest,
+  validateRendererUpdateProjectRequest,
   validateUpdateProjectRequest
 };

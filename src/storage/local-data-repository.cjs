@@ -7,10 +7,14 @@ const {
   APPLICATION_SCHEMA_VERSION,
   CURRENT_SCHEMA_VERSION,
   PROJECT_SCHEMA_VERSION,
+  assertManagedMediaId,
+  assertProjectId,
+  assertRevision,
   validateApplicationUpdateRequest,
   validateArchiveProjectRequest,
   validateCreateProjectRequest,
   validateDocument,
+  validateMediaRecord,
   validateProjectReadRequest,
   validateUpdateProjectRequest
 } = require('./storage-contracts.cjs');
@@ -39,8 +43,8 @@ class StorageConflictError extends LocalDataError {
 }
 
 class StorageNotFoundError extends LocalDataError {
-  constructor() {
-    super('STORAGE_NOT_FOUND', 'The requested local project does not exist.');
+  constructor(message = 'The requested local project does not exist.') {
+    super('STORAGE_NOT_FOUND', message);
     this.name = 'StorageNotFoundError';
   }
 }
@@ -61,7 +65,8 @@ function createFreshDocument(timestamp) {
       selectedProjectId: null,
       recentProjectIds: []
     },
-    projects: {}
+    projects: {},
+    media: {}
   };
 }
 
@@ -384,6 +389,123 @@ class LocalDataRepository {
       validateDocument(candidate);
       await this.#commit(candidate);
       return clone({ storeRevision: candidate.revision, project: candidate.projects[request.projectId] });
+    });
+  }
+
+  async findMediaByHash(sha256) {
+    if (typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sha256)) {
+      throw new TypeError('sha256 is invalid.');
+    }
+    const media = Object.values(this.document.media ?? {}).find((item) => item.sha256 === sha256);
+    return media ? clone(media) : null;
+  }
+
+  async getMediaRecord(mediaId) {
+    assertManagedMediaId(mediaId);
+    const media = (this.document.media ?? {})[mediaId];
+    if (!media) throw new LocalDataError('MEDIA_NOT_FOUND', 'The requested media item does not exist.');
+    return clone({ storeRevision: this.document.revision, media });
+  }
+
+  async listMedia() {
+    return clone({
+      storeRevision: this.document.revision,
+      media: Object.values(this.document.media ?? {})
+        .map(({ id, kind, originalFilename, fileSize, importedAt, width, height, durationSeconds, availability }) => ({
+          id,
+          kind,
+          originalFilename,
+          fileSize,
+          importedAt,
+          width,
+          height,
+          durationSeconds,
+          availability
+        }))
+        .sort((left, right) => right.importedAt.localeCompare(left.importedAt) || left.id.localeCompare(right.id))
+    });
+  }
+
+  async createMediaRecord({ expectedRevision, media }) {
+    assertRevision(expectedRevision, 'expectedRevision');
+    validateMediaRecord(media);
+    return this.#enqueueMutation(async () => {
+      this.#assertExpectedRevision(expectedRevision);
+      if ((this.document.media ?? {})[media.id]) {
+        throw new LocalDataError('MEDIA_ID_COLLISION', 'Media id already exists.');
+      }
+      const duplicate = Object.values(this.document.media ?? {}).find((item) => item.sha256 === media.sha256);
+      if (duplicate) throw new LocalDataError('MEDIA_DUPLICATE', 'Identical media already exists.');
+
+      const candidate = clone(this.document);
+      candidate.media ??= {};
+      candidate.media[media.id] = clone(media);
+      candidate.revision += 1;
+      candidate.updatedAt = this.#timestamp();
+      validateDocument(candidate);
+      await this.#commit(candidate);
+      return clone({ storeRevision: candidate.revision, media: candidate.media[media.id] });
+    });
+  }
+
+  async attachMediaToProject({ projectId, mediaId, expectedRevision }) {
+    assertProjectId(projectId);
+    assertManagedMediaId(mediaId);
+    assertRevision(expectedRevision, 'expectedRevision');
+    return this.#enqueueMutation(async () => {
+      this.#assertExpectedRevision(expectedRevision);
+      const project = this.document.projects[projectId];
+      if (!project) throw new StorageNotFoundError();
+      if (project.status === 'archived') throw new LocalDataError('PROJECT_ARCHIVED', 'Archived projects cannot be edited.');
+      if (!(this.document.media ?? {})[mediaId]) {
+        throw new LocalDataError('MEDIA_NOT_FOUND', 'The requested media item does not exist.');
+      }
+      if (project.mediaIds.includes(mediaId)) {
+        return clone({ storeRevision: this.document.revision, project });
+      }
+
+      const timestamp = this.#timestamp();
+      const candidate = clone(this.document);
+      candidate.projects[projectId] = {
+        ...project,
+        mediaIds: [...project.mediaIds, mediaId],
+        updatedAt: timestamp,
+        revision: project.revision + 1
+      };
+      candidate.revision += 1;
+      candidate.updatedAt = timestamp;
+      validateDocument(candidate);
+      await this.#commit(candidate);
+      return clone({ storeRevision: candidate.revision, project: candidate.projects[projectId] });
+    });
+  }
+
+  async detachMediaFromProject({ projectId, mediaId, expectedRevision }) {
+    assertProjectId(projectId);
+    assertManagedMediaId(mediaId);
+    assertRevision(expectedRevision, 'expectedRevision');
+    return this.#enqueueMutation(async () => {
+      this.#assertExpectedRevision(expectedRevision);
+      const project = this.document.projects[projectId];
+      if (!project) throw new StorageNotFoundError();
+      if (project.status === 'archived') throw new LocalDataError('PROJECT_ARCHIVED', 'Archived projects cannot be edited.');
+      if (!project.mediaIds.includes(mediaId)) {
+        return clone({ storeRevision: this.document.revision, project });
+      }
+
+      const timestamp = this.#timestamp();
+      const candidate = clone(this.document);
+      candidate.projects[projectId] = {
+        ...project,
+        mediaIds: project.mediaIds.filter((id) => id !== mediaId),
+        updatedAt: timestamp,
+        revision: project.revision + 1
+      };
+      candidate.revision += 1;
+      candidate.updatedAt = timestamp;
+      validateDocument(candidate);
+      await this.#commit(candidate);
+      return clone({ storeRevision: candidate.revision, project: candidate.projects[projectId] });
     });
   }
 }

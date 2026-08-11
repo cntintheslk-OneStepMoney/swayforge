@@ -19,7 +19,10 @@ const REQUIRED_FILES = Object.freeze([
   'src/security/protected-secret-store.cjs',
   'src/storage/storage-contracts.cjs',
   'src/storage/migrations.cjs',
-  'src/storage/local-data-repository.cjs'
+  'src/storage/local-data-repository.cjs',
+  'src/media/media-contracts.cjs',
+  'src/media/media-import-service.cjs',
+  'docs/media-storage.md'
 ]);
 
 const FORBIDDEN_BASENAMES = new Set([
