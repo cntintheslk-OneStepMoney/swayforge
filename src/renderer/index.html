@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <title>SwayForge</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./renderer-app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Application foundation</p>
+        <h1>SwayForge</h1>
+        <p class="tagline">A local-first workspace for creating and managing social content.</p>
+      </div>
+      <p class="version" aria-label="Application version">Version <span id="app-version">Loading…</span></p>
+    </header>
+
+    <main id="main-content">
+      <section class="foundation-card" aria-labelledby="foundation-heading">
+        <div class="status-badge">Foundation build</div>
+        <h2 id="foundation-heading">The desktop shell is ready for the next modules.</h2>
+        <p>
+          This build establishes the secure Electron application boundary. Social accounts, media workflows,
+          Ollama features, publishing, trends and automation are intentionally not enabled yet.
+        </p>
+
+        <dl class="foundation-status" aria-label="Foundation status">
+          <div>
+            <dt>Desktop shell</dt>
+            <dd>Ready</dd>
+          </div>
+          <div>
+            <dt>Secure renderer bridge</dt>
+            <dd id="bridge-status">Checking…</dd>
+          </div>
+          <div>
+            <dt>Runtime</dt>
+            <dd id="runtime-status">Loading…</dd>
+          </div>
+        </dl>
+
+        <p id="boot-error" class="boot-error" role="alert" hidden></p>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>Local-first foundation · No telemetry · No social network calls</p>
+    </footer>
+  </body>
+</html>

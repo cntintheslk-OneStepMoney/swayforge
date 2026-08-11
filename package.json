@@ -1,0 +1,19 @@
+{
+  "name": "swayforge",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Local-first social content workspace foundation.",
+  "main": "src/main/main-process.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "check": "node scripts/check-project.cjs",
+    "lint": "node scripts/lint-project.cjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "electron": "43.3.0"
+  }
+}
