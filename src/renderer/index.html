@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,52 +9,153 @@
     >
     <title>SwayForge</title>
     <link rel="stylesheet" href="./styles.css">
+    <script src="./navigation-model.js" defer></script>
     <script src="./renderer-app.js" defer></script>
   </head>
   <body>
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">Application foundation</p>
-        <h1>SwayForge</h1>
-        <p class="tagline">A local-first workspace for creating and managing social content.</p>
-      </div>
-      <p class="version" aria-label="Application version">Version <span id="app-version">Loading…</span></p>
-    </header>
-
-    <main id="main-content">
-      <section class="foundation-card" aria-labelledby="foundation-heading">
-        <div class="status-badge">Foundation build</div>
-        <h2 id="foundation-heading">The desktop shell and local AI boundary are ready for the next modules.</h2>
-        <p>
-          This build establishes the secure Electron application boundary and local Ollama runtime detection.
-          Content generation, social accounts, media workflows, publishing, trends and automation are intentionally not enabled yet.
-        </p>
-
-        <dl class="foundation-status" aria-label="Foundation status">
+    <div class="app-shell">
+      <aside class="app-sidebar" aria-label="Primary application navigation">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">SF</span>
           <div>
-            <dt>Desktop shell</dt>
-            <dd>Ready</dd>
+            <h1>SwayForge</h1>
+            <p>Catch the signal. Forge the content.</p>
           </div>
-          <div>
-            <dt>Secure renderer bridge</dt>
-            <dd id="bridge-status">Checking…</dd>
-          </div>
-          <div>
-            <dt>Runtime</dt>
-            <dd id="runtime-status">Loading…</dd>
-          </div>
-          <div>
-            <dt>Local AI</dt>
-            <dd id="ai-status">Checking…</dd>
-          </div>
-        </dl>
+        </div>
 
-        <p id="boot-error" class="boot-error" role="alert" hidden></p>
-      </section>
-    </main>
+        <nav class="primary-nav" aria-label="Primary">
+          <button class="nav-item is-selected" type="button" data-route="home" aria-current="page">
+            <span>Home</span>
+          </button>
+          <button class="nav-item" type="button" data-route="projects">
+            <span>Projects</span>
+          </button>
+          <button class="nav-item" type="button" data-route="media">
+            <span>Media</span>
+          </button>
+          <button class="nav-item nav-item--future" type="button" data-route="create" aria-disabled="true" disabled>
+            <span>Create</span><span class="nav-meta">Later</span>
+          </button>
+          <button class="nav-item nav-item--future" type="button" data-route="trends" aria-disabled="true" disabled>
+            <span>Trends</span><span class="nav-meta">v0.5</span>
+          </button>
+          <button class="nav-item nav-item--future" type="button" data-route="publishing" aria-disabled="true" disabled>
+            <span>Publishing</span><span class="nav-meta">v0.4</span>
+          </button>
+          <button class="nav-item" type="button" data-route="settings">
+            <span>Settings</span>
+          </button>
+        </nav>
 
-    <footer class="app-footer">
-      <p>Local-first foundation · No telemetry · Local AI only · No social network calls</p>
-    </footer>
+        <div class="sidebar-footer">
+          <span class="privacy-dot" aria-hidden="true"></span>
+          <span>Local-first · No telemetry</span>
+        </div>
+      </aside>
+
+      <main id="main-content" class="app-main" tabindex="-1">
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">Application foundation</p>
+            <h2 id="page-heading">Home</h2>
+            <p id="page-context" class="page-context">Your local SwayForge workspace at a glance.</p>
+          </div>
+          <p class="version-badge" aria-label="Application version">Version <span id="app-version">Loading…</span></p>
+        </header>
+
+        <p id="global-status" class="notice notice--error" role="alert" hidden></p>
+
+        <section id="view-home" class="view" data-view="home" aria-labelledby="page-heading">
+          <div class="hero-panel">
+            <div>
+              <p class="eyebrow">Foundation workspace</p>
+              <h3>Build locally. Stay in control.</h3>
+              <p>SwayForge keeps the foundation on-device while later AI, trend and publishing layers remain governed by explicit application rules.</p>
+            </div>
+            <div class="button-group" aria-label="Workspace shortcuts">
+              <button class="button button--primary" type="button" data-nav-target="projects">Open projects</button>
+              <button class="button button--secondary" type="button" data-nav-target="media">Open media</button>
+              <button class="button button--quiet" type="button" data-nav-target="settings">Settings</button>
+            </div>
+          </div>
+
+          <section class="content-section" aria-labelledby="capability-heading">
+            <div class="section-heading">
+              <div>
+                <h3 id="capability-heading">Local capability status</h3>
+                <p>Real local services only — no fabricated account, trend or performance data.</p>
+              </div>
+              <button id="refresh-status" class="button button--secondary" type="button">Refresh</button>
+            </div>
+            <div class="status-grid" aria-live="polite">
+              <article class="status-card"><span>Projects</span><strong id="project-count">Loading…</strong><small>Local projects</small></article>
+              <article class="status-card"><span>Media</span><strong id="media-count">Loading…</strong><small>Managed local items</small></article>
+              <article class="status-card"><span>Local AI</span><strong id="ai-status">Checking…</strong><small>Ollama runtime</small></article>
+              <article class="status-card"><span>Credential storage</span><strong id="secret-status">Checking…</strong><small>Protected local boundary</small></article>
+            </div>
+          </section>
+
+          <div class="notice notice--info">
+            <strong>Foundation release.</strong>
+            Future publishing and trend features are intentionally not enabled yet. Disabled destinations are shown only to make the product direction clear.
+          </div>
+        </section>
+
+        <section id="view-projects" class="view" data-view="projects" aria-labelledby="page-heading" hidden>
+          <div class="section-heading">
+            <div>
+              <h3>Local projects</h3>
+              <p>Project summaries are read from the existing local storage contract.</p>
+            </div>
+            <button id="reload-projects" class="button button--secondary" type="button">Reload</button>
+          </div>
+          <div id="projects-state" class="empty-state" role="status">
+            <strong>Loading projects…</strong>
+            <span>Reading local project summaries.</span>
+          </div>
+          <div id="project-list" class="card-list" aria-live="polite"></div>
+        </section>
+
+        <section id="view-media" class="view" data-view="media" aria-labelledby="page-heading" hidden>
+          <div class="section-heading">
+            <div>
+              <h3>Managed media</h3>
+              <p>Imported media remains a separate managed copy; source files are never modified by this view.</p>
+            </div>
+            <div class="button-group">
+              <button id="reload-media" class="button button--secondary" type="button">Reload</button>
+              <button id="import-media" class="button button--primary" type="button">Import media</button>
+            </div>
+          </div>
+          <div id="media-state" class="empty-state" role="status">
+            <strong>Loading media…</strong>
+            <span>Reading local media summaries.</span>
+          </div>
+          <div id="media-list" class="card-list" aria-live="polite"></div>
+        </section>
+
+        <section id="view-settings" class="view" data-view="settings" aria-labelledby="page-heading" hidden>
+          <div class="settings-grid">
+            <article class="panel">
+              <span class="status-badge">Foundation</span>
+              <h3>Settings shell</h3>
+              <p>Ollama configuration, appearance persistence and privacy-safe diagnostics will be completed by #10. This view does not create a competing settings store.</p>
+            </article>
+            <article class="panel">
+              <h3>Appearance ready</h3>
+              <p>The shared token system supports Light, Dark and System palettes. System is the non-persisted foundation default until settings persistence is integrated.</p>
+            </article>
+            <article class="panel">
+              <h3>Privacy baseline</h3>
+              <ul class="plain-list">
+                <li>No telemetry or behavioural tracking.</li>
+                <li>No social network calls in this release.</li>
+                <li>No secret values shown in the renderer.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
   </body>
 </html>
