@@ -1,0 +1,99 @@
+name: Quality and privacy
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core quality gate (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.12.0
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Run repository privacy guard
+        run: npm run check:privacy
+
+      - name: Run source security policy
+        run: npm run check:security
+
+      - name: Validate workflow policy
+        run: npm run check:workflow
+
+      - name: Run canonical project integrity gate
+        run: npm run check
+
+      - name: Run lint/static checks
+        run: npm run lint
+
+      - name: Review production dependency advisories
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check changed-file whitespace
+        run: git diff --check
+
+  windows:
+    name: Windows core and Electron preflight
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.12.0
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run complete automated tests
+        run: npm test
+
+      - name: Run Windows path and storage regression selection
+        run: npm run test:windows
+
+      - name: Run canonical project integrity gate
+        run: npm run check
+
+      - name: Run lint/static checks
+        run: npm run lint
+
+      - name: Run Electron non-interactive preflight
+        run: npm run smoke:electron
+
+      - name: Check changed-file whitespace
+        run: git diff --check
