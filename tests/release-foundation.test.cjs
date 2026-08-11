@@ -30,14 +30,17 @@ test('release metadata has one authoritative v0.1.0 application version', () => 
 
 test('release surface includes Windows packaging without adding publishing or update behaviour', () => {
   assert.match(packageJson.scripts['pack:win'], /electron-builder/);
+  assert.match(packageJson.scripts['pack:win'], /--publish never/);
   assert.match(packageJson.scripts['dist:win'], /electron-builder/);
+  assert.match(packageJson.scripts['dist:win'], /--publish never/);
   assert.equal(packageJson.scripts['check:package'], 'node scripts/check-package-config.cjs');
   assert.equal(packageJson.scripts['check:package-output'], 'node scripts/check-package-output.cjs');
 
   const workflow = read('.github/workflows/windows-packaging.yml');
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /branches:\s*\n\s*- main/);
-  assert.match(workflow, /--publish never/);
+  assert.match(workflow, /npm run pack:win/);
+  assert.match(workflow, /npm run dist:win/);
   assert.doesNotMatch(workflow, /release\s+create|autoUpdater|publish:\s*(?!never)/i);
 });
 
