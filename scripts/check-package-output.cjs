@@ -107,11 +107,21 @@ function validatePackageOutput(root = ROOT) {
   return true;
 }
 
+function escapeWorkflowCommand(value) {
+  return String(value)
+    .replace(/%/g, '%25')
+    .replace(/\r/g, '%0D')
+    .replace(/\n/g, '%0A');
+}
+
 if (require.main === module) {
   try {
     validatePackageOutput(ROOT);
     process.stdout.write('Windows package output check passed.\n');
   } catch (error) {
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      process.stdout.write(`::error file=scripts/check-package-output.cjs,title=Windows package output rejected::${escapeWorkflowCommand(error.message)}\n`);
+    }
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
   }
@@ -122,6 +132,7 @@ module.exports = {
   DIST_DIRECTORY,
   RESOURCES_DIRECTORY,
   UNPACKED_DIRECTORY,
+  escapeWorkflowCommand,
   listAsar,
   normaliseArchivePath,
   validatePackageOutput,
