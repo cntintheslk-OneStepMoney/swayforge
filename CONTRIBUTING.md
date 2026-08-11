@@ -7,12 +7,32 @@ Thank you for improving SwayForge.
 Run the strongest checks available for the work you changed and report unavailable environment-dependent checks accurately. At minimum for the current foundation:
 
 ```sh
+npm ci
 npm test
 npm run check
 npm run lint
+git diff --check
+```
+
+Focused gates are also available:
+
+```sh
+npm run check:privacy
+npm run check:security
+npm run check:workflow
+npm run test:smoke
 ```
 
 Never commit creator media, OAuth tokens, API keys, client secrets, session cookies, protected credential stores, `.env` files, private diagnostics, or realistic private account data. Keep AI and creator media local where practical; do not introduce third-party uploads, telemetry, analytics, remote logging, social publishing side effects, or cloud AI unless the relevant Issue explicitly requires and approves them.
+
+### Test fixtures and local test state
+
+- Use synthetic, generated or clearly redistribution-safe fixtures only.
+- Never copy a real social account export, creator clip, credential store, diagnostic export or scraped platform payload into tests.
+- Prefer temporary directories under the operating-system temp location for storage/media integration tests and clean them after each test.
+- If a token-shaped or media fixture is genuinely required, allowlist its exact test path rather than weakening a file class or secret rule globally.
+- Live Ollama and live social APIs must remain optional environment-specific verification, not hidden dependencies of deterministic tests.
+- Record verification as Passed, Failed, Skipped or Unavailable truthfully. Do not convert an unavailable environment check into a pass.
 
 ## Git and GitHub conventions
 
@@ -24,6 +44,7 @@ SwayForge uses the same Git and GitHub naming/documentation scheme as OneStep Mo
 - Start work from the current `main` on a descriptive non-main branch.
 - Never rewrite shared history, force-push, delete remote branches or merge a PR without explicit approval.
 - Keep commits focused and avoid unrelated edits.
+- Open implementation pull requests as drafts and leave them unmerged for user review.
 
 ### Branch names
 
