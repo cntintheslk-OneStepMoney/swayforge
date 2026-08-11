@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { app, BrowserWindow, dialog, ipcMain, safeStorage, session } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, session, shell } = require('electron');
 const {
   IPC_CHANNELS,
   createApplicationInfo,
@@ -36,6 +36,24 @@ const {
 } = require('../media/media-contracts.cjs');
 const { MediaImportService } = require('../media/media-import-service.cjs');
 const {
+  SETTINGS_AI_MODELS_REQUEST,
+  SETTINGS_IPC_CHANNELS,
+  SETTINGS_OPEN_APP_DATA_REQUEST,
+  SETTINGS_READ_REQUEST,
+  SETTINGS_STORAGE_INFO_REQUEST,
+  isExactRequest: isExactSettingsRequest,
+  validateSettingsUpdateRequest
+} = require('../settings/settings-contracts.cjs');
+const { ApplicationSettingsService } = require('../settings/application-settings-service.cjs');
+const {
+  DIAGNOSTIC_CLEAR_REQUEST,
+  DIAGNOSTIC_EXPORT_REQUEST,
+  DIAGNOSTIC_IPC_CHANNELS,
+  DIAGNOSTIC_LIST_REQUEST,
+  isExactRequest: isExactDiagnosticRequest
+} = require('../diagnostics/diagnostic-contracts.cjs');
+const { DiagnosticStore } = require('../diagnostics/diagnostic-store.cjs');
+const {
   WINDOW_WEB_PREFERENCES,
   installNavigationGuards
 } = require('../security/electron-window-policy.cjs');
@@ -46,6 +64,7 @@ const FALLBACK_ENTRY = path.join(RENDERER_DIRECTORY, 'fallback.html');
 const DATA_DIRECTORY_NAME = 'data';
 const CREDENTIAL_DIRECTORY_NAME = 'credentials';
 const MEDIA_DIRECTORY_NAME = 'media';
+const DIAGNOSTIC_DIRECTORY_NAME = 'diagnostics';
 
 let primaryWindow = null;
 let handlersRegistered = false;
@@ -53,15 +72,22 @@ let permissionsLockedDown = false;
 let localDataRepository = null;
 let protectedSecretStore = null;
 let mediaImportService = null;
+let diagnosticStore = null;
+let applicationSettingsService = null;
 let aiRuntime = null;
 
+function createAiRuntime({ endpoint, enabled = true, selectedModel = null, logger = () => {} } = {}) {
+  return new AiRuntimeService({
+    provider: new OllamaProvider(endpoint ? { endpoint } : undefined),
+    logger,
+    enabled,
+    selectedModel
+  });
+}
+
 function getAiRuntime() {
-  if (!aiRuntime) {
-    aiRuntime = new AiRuntimeService({
-      provider: new OllamaProvider(),
-      logger: (event) => console.info('[ai-runtime]', event)
-    });
-  }
+  if (applicationSettingsService) return applicationSettingsService.getRuntime();
+  if (!aiRuntime) aiRuntime = createAiRuntime();
   return aiRuntime;
 }
 
@@ -73,6 +99,16 @@ function getProtectedSecretStore() {
 function getMediaImportService() {
   if (!mediaImportService) throw new Error('Media import service is not initialised.');
   return mediaImportService;
+}
+
+function getApplicationSettingsService() {
+  if (!applicationSettingsService) throw new Error('Application settings are not initialised.');
+  return applicationSettingsService;
+}
+
+function getDiagnosticStore() {
+  if (!diagnosticStore) throw new Error('Diagnostics are not initialised.');
+  return diagnosticStore;
 }
 
 function sanitiseStorageError(error) {
@@ -112,6 +148,16 @@ function sanitiseMediaError(error) {
   });
 }
 
+function sanitiseSettingsError(error) {
+  const code = typeof error?.code === 'string' ? error.code : error instanceof TypeError ? 'INVALID_REQUEST' : 'SETTINGS_ERROR';
+  const messages = Object.freeze({
+    INVALID_REQUEST: 'The settings request was invalid or unsafe.',
+    STORAGE_CONFLICT: 'Settings changed before this action could be saved. Reload Settings and try again.',
+    STORAGE_CORRUPT: 'Local application settings could not be read safely. Existing data was preserved.'
+  });
+  return Object.freeze({ code, message: messages[code] ?? 'Settings could not be changed safely.' });
+}
+
 async function storageResult(operation) {
   try {
     return Object.freeze({ ok: true, value: await operation() });
@@ -140,28 +186,66 @@ async function mediaResult(operation) {
   }
 }
 
+async function settingsResult(operation) {
+  try {
+    return Object.freeze({ ok: true, value: await operation() });
+  } catch (error) {
+    return Object.freeze({ ok: false, error: sanitiseSettingsError(error) });
+  }
+}
+
+async function diagnosticsResult(operation) {
+  try {
+    return Object.freeze({ ok: true, value: await operation() });
+  } catch (error) {
+    return Object.freeze({
+      ok: false,
+      error: Object.freeze({
+        code: error instanceof TypeError ? 'INVALID_REQUEST' : 'DIAGNOSTICS_ERROR',
+        message: error instanceof TypeError
+          ? 'The diagnostics request was invalid.'
+          : 'Local diagnostics could not be accessed safely. Core application data was not changed.'
+      })
+    });
+  }
+}
+
 async function chooseMediaFile() {
   const options = Object.freeze({
     title: 'Import media',
     properties: ['openFile'],
-    filters: [
-      { name: 'Supported media', extensions: ['jpg', 'jpeg', 'png', 'mp4', 'mov'] }
-    ]
+    filters: [{ name: 'Supported media', extensions: ['jpg', 'jpeg', 'png', 'mp4', 'mov'] }]
   });
   return primaryWindow && !primaryWindow.isDestroyed()
     ? dialog.showOpenDialog(primaryWindow, options)
     : dialog.showOpenDialog(options);
 }
 
+async function chooseDiagnosticExportFile() {
+  const options = Object.freeze({
+    title: 'Export SwayForge diagnostics',
+    defaultPath: path.join(app.getPath('documents'), 'swayforge-diagnostics.json'),
+    filters: [{ name: 'JSON diagnostic export', extensions: ['json'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation']
+  });
+  return primaryWindow && !primaryWindow.isDestroyed()
+    ? dialog.showSaveDialog(primaryWindow, options)
+    : dialog.showSaveDialog(options);
+}
+
 function registerIpcHandlers(
   repository = localDataRepository,
   secretStore = protectedSecretStore,
-  mediaService = mediaImportService
+  mediaService = mediaImportService,
+  settingsService = applicationSettingsService,
+  diagnostics = diagnosticStore
 ) {
   if (handlersRegistered) return;
   if (!repository) throw new Error('Local data repository must be ready before IPC registration.');
   if (!secretStore) throw new Error('Protected credential storage must be initialised before IPC registration.');
   if (!mediaService) throw new Error('Media import service must be initialised before IPC registration.');
+  if (!settingsService) throw new Error('Application settings must be initialised before IPC registration.');
+  if (!diagnostics) throw new Error('Diagnostics must be initialised before IPC registration.');
   handlersRegistered = true;
 
   ipcMain.handle(IPC_CHANNELS.applicationInfo, () =>
@@ -182,12 +266,12 @@ function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.aiRuntimeStatus, (_event, request) => {
     if (!isAiStatusRequest(request)) throw new TypeError('Invalid AI status request.');
-    return getAiRuntime().getStatus();
+    return settingsService.getRuntime().getStatus();
   });
 
   ipcMain.handle(IPC_CHANNELS.aiRuntimeRefresh, (_event, request) => {
     if (!isAiRefreshRequest(request)) throw new TypeError('Invalid AI refresh request.');
-    return getAiRuntime().getStatus({ refresh: true });
+    return settingsService.getRuntime().getStatus({ refresh: true });
   });
 
   ipcMain.handle(SECRET_IPC_CHANNELS.status, (_event, request) => {
@@ -195,9 +279,7 @@ function registerIpcHandlers(
     return secretStore.getStatus();
   });
 
-  ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateRead, () =>
-    storageResult(() => repository.readApplicationState())
-  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateRead, () => storageResult(() => repository.readApplicationState()));
   ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateUpdate, (_event, request) =>
     storageResult(() => repository.updateApplicationState(validateApplicationUpdateRequest(request)))
   );
@@ -210,9 +292,7 @@ function registerIpcHandlers(
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectUpdate, (_event, request) =>
     storageResult(() => repository.updateProject(validateRendererUpdateProjectRequest(request)))
   );
-  ipcMain.handle(STORAGE_IPC_CHANNELS.projectList, () =>
-    storageResult(() => repository.listProjects())
-  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.projectList, () => storageResult(() => repository.listProjects()));
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectArchive, (_event, request) =>
     storageResult(() => repository.archiveProject(validateArchiveProjectRequest(request)))
   );
@@ -237,6 +317,71 @@ function registerIpcHandlers(
   ipcMain.handle(MEDIA_IPC_CHANNELS.detach, (_event, request) =>
     mediaResult(() => mediaService.detachMediaFromProject(validateProjectMediaRequest(request)))
   );
+
+  ipcMain.handle(SETTINGS_IPC_CHANNELS.read, (_event, request) => {
+    if (!isExactSettingsRequest(request, SETTINGS_READ_REQUEST)) {
+      return settingsResult(() => Promise.reject(new TypeError('Invalid settings read request.')));
+    }
+    return settingsResult(() => settingsService.getSnapshot());
+  });
+  ipcMain.handle(SETTINGS_IPC_CHANNELS.update, (_event, request) =>
+    settingsResult(() => settingsService.update(validateSettingsUpdateRequest(request)))
+  );
+  ipcMain.handle(SETTINGS_IPC_CHANNELS.aiModels, (_event, request) => {
+    if (!isExactSettingsRequest(request, SETTINGS_AI_MODELS_REQUEST)) {
+      return settingsResult(() => Promise.reject(new TypeError('Invalid model-list request.')));
+    }
+    return settingsResult(() => settingsService.listTextModels());
+  });
+  ipcMain.handle(SETTINGS_IPC_CHANNELS.storageInfo, (_event, request) => {
+    if (!isExactSettingsRequest(request, SETTINGS_STORAGE_INFO_REQUEST)) {
+      return settingsResult(() => Promise.reject(new TypeError('Invalid storage-info request.')));
+    }
+    return settingsResult(async () => {
+      const [projects, media] = await Promise.all([repository.listProjects(), repository.listMedia()]);
+      return Object.freeze({
+        applicationData: 'Per-user SwayForge application data',
+        mediaStorage: 'Managed local SwayForge media storage',
+        projectCount: projects.projects.length,
+        mediaCount: media.media.length,
+        storageKind: repository.getStorageSummary().storageKind,
+        localOnly: true
+      });
+    });
+  });
+  ipcMain.handle(SETTINGS_IPC_CHANNELS.openAppData, (_event, request) => {
+    if (!isExactSettingsRequest(request, SETTINGS_OPEN_APP_DATA_REQUEST)) {
+      return settingsResult(() => Promise.reject(new TypeError('Invalid open-app-data request.')));
+    }
+    return settingsResult(async () => {
+      const result = await shell.openPath(app.getPath('userData'));
+      if (result) throw new Error('Application data folder could not be opened.');
+      return Object.freeze({ opened: true });
+    });
+  });
+
+  ipcMain.handle(DIAGNOSTIC_IPC_CHANNELS.list, (_event, request) => {
+    if (!isExactDiagnosticRequest(request, DIAGNOSTIC_LIST_REQUEST)) {
+      return diagnosticsResult(() => Promise.reject(new TypeError('Invalid diagnostics list request.')));
+    }
+    return diagnosticsResult(() => diagnostics.list());
+  });
+  ipcMain.handle(DIAGNOSTIC_IPC_CHANNELS.clear, (_event, request) => {
+    if (!isExactDiagnosticRequest(request, DIAGNOSTIC_CLEAR_REQUEST)) {
+      return diagnosticsResult(() => Promise.reject(new TypeError('Invalid diagnostics clear request.')));
+    }
+    return diagnosticsResult(() => diagnostics.clear());
+  });
+  ipcMain.handle(DIAGNOSTIC_IPC_CHANNELS.export, async (_event, request) => {
+    if (!isExactDiagnosticRequest(request, DIAGNOSTIC_EXPORT_REQUEST)) {
+      return diagnosticsResult(() => Promise.reject(new TypeError('Invalid diagnostics export request.')));
+    }
+    const selection = await chooseDiagnosticExportFile();
+    if (selection.canceled || !selection.filePath) {
+      return Object.freeze({ ok: true, value: Object.freeze({ status: 'cancelled' }) });
+    }
+    return diagnosticsResult(() => diagnostics.exportTo(selection.filePath));
+  });
 }
 
 async function initialiseLocalDataRepository() {
@@ -267,10 +412,33 @@ async function initialiseMediaImportService() {
   return mediaImportService;
 }
 
+async function initialiseDiagnosticStore() {
+  if (diagnosticStore) return diagnosticStore;
+  diagnosticStore = await DiagnosticStore.open({
+    rootDirectory: path.join(app.getPath('userData'), DIAGNOSTIC_DIRECTORY_NAME),
+    applicationVersion: app.getVersion()
+  });
+  return diagnosticStore;
+}
+
+async function initialiseApplicationSettings() {
+  if (applicationSettingsService) return applicationSettingsService;
+  if (!localDataRepository) throw new Error('Local data repository must be ready before settings initialisation.');
+  if (!diagnosticStore) throw new Error('Diagnostics must be ready before settings initialisation.');
+  const fallbackRuntime = aiRuntime;
+  applicationSettingsService = await ApplicationSettingsService.create({
+    repository: localDataRepository,
+    diagnosticStore,
+    runtimeFactory: (options) => createAiRuntime(options)
+  });
+  if (fallbackRuntime && fallbackRuntime !== applicationSettingsService.getRuntime()) fallbackRuntime.shutdown();
+  aiRuntime = applicationSettingsService.getRuntime();
+  return applicationSettingsService;
+}
+
 function lockDownRendererPermissions() {
   if (permissionsLockedDown) return;
   permissionsLockedDown = true;
-
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
@@ -296,7 +464,6 @@ function createPrimaryWindow() {
   });
 
   primaryWindow = window;
-
   installNavigationGuards(window.webContents, [
     pathToFileURL(RENDERER_ENTRY).href,
     pathToFileURL(FALLBACK_ENTRY).href
@@ -305,7 +472,6 @@ function createPrimaryWindow() {
   window.once('ready-to-show', () => {
     if (!window.isDestroyed()) window.show();
   });
-
   window.on('closed', () => {
     if (primaryWindow === window) primaryWindow = null;
   });
@@ -323,7 +489,6 @@ function createPrimaryWindow() {
       app.quit();
     }
   });
-
   return window;
 }
 
@@ -331,6 +496,8 @@ async function startApplication() {
   await initialiseLocalDataRepository();
   await initialiseProtectedSecretStore();
   await initialiseMediaImportService();
+  await initialiseDiagnosticStore();
+  await initialiseApplicationSettings();
   registerIpcHandlers();
   lockDownRendererPermissions();
   createPrimaryWindow();
@@ -363,18 +530,26 @@ app.on('window-all-closed', () => {
 });
 
 module.exports = {
+  createAiRuntime,
   createPrimaryWindow,
+  diagnosticsResult,
   getAiRuntime,
+  getApplicationSettingsService,
+  getDiagnosticStore,
   getMediaImportService,
   getProtectedSecretStore,
+  initialiseApplicationSettings,
+  initialiseDiagnosticStore,
   initialiseLocalDataRepository,
   initialiseMediaImportService,
-  initialiseProteectedSecretStor,
+  initialiseProtectedSecretStore,
   lockDownRendererPermissions,
   mediaResult,
   registerIpcHandlers,
   sanitiseMediaError,
+  sanitiseSettingsError,
   sanitiseStorageError,
+  settingsResult,
   startApplication,
   storageResult
 };
