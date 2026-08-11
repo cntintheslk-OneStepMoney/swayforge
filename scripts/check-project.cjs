@@ -14,6 +14,9 @@ const REQUIRED_FILES = Object.freeze([
   'src/renderer/fallback.css',
   'src/core/application-contracts.cjs',
   'src/security/electron-window-policy.cjs',
+  'src/security/secret-contracts.cjs',
+  'src/security/secret-redaction.cjs',
+  'src/security/protected-secret-store.cjs',
   'src/storage/storage-contracts.cjs',
   'src/storage/migrations.cjs',
   'src/storage/local-data-repository.cjs'
@@ -26,7 +29,9 @@ const FORBIDDEN_BASENAMES = new Set([
   'oauth-response.json',
   'cookies.json',
   'workspace.json',
-  'workspace.previous.json'
+  'workspace.previous.json',
+  'credential-store.json',
+  'credential-store.previous.json'
 ]);
 
 const FORBIDDEN_EXTENSIONS = new Set([
@@ -36,6 +41,13 @@ const FORBIDDEN_EXTENSIONS = new Set([
 ]);
 
 const IGNORED_DIRECTORIES = new Set(['.git', 'node_modules', 'dist', 'out', 'release', 'coverage']);
+const MAX_SECRET_SCAN_BYTES = 1024 * 1024;
+const LIKELY_SECRET_PATTERNS = Object.freeze([
+  { name: 'private-key header', pattern: /^-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----$/m },
+  { name: 'GitHub token', pattern: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/ },
+  { name: 'OpenAI-style secret key', pattern: /\bsk-[A-Za-z0-9]{32,}\b/ },
+  { name: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/ }
+]);
 
 function listFiles(root, current = root, output = []) {
   for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
@@ -47,18 +59,47 @@ function listFiles(root, current = root, output = []) {
   return output;
 }
 
+function isForbiddenProjectFile(relativePath) {
+  const basename = path.basename(relativePath).toLowerCase();
+  const extension = path.extname(relativePath).toLowerCase();
+  if (FORBIDDEN_BASENAMES.has(basename) || FORBIDDEN_EXTENSIONS.has(extension)) return true;
+  if (/^\.env(?:\..+)?$/i.test(basename)) return true;
+  return /(?:credential|token|oauth|session|cookie).*(?:dump|export|backup)\.(?:json|txt|log)$/i.test(basename);
+}
+
 function assertNoForbiddenProjectFiles(root) {
   const violations = [];
   for (const relativePath of listFiles(root)) {
-    const basename = path.basename(relativePath).toLowerCase();
-    const extension = path.extname(relativePath).toLowerCase();
-    if (FORBIDDEN_BASENAMES.has(basename) || FORBIDDEN_EXTENSIONS.has(extension)) {
-      violations.push(relativePath);
-    }
+    if (isForbiddenProjectFile(relativePath)) violations.push(relativePath);
   }
 
   if (violations.length > 0) {
     throw new Error(`Forbidden secret/runtime/private-media file class detected: ${violations.join(', ')}`);
+  }
+}
+
+function assertNoLikelySecretContent(root) {
+  const violations = [];
+  for (const relativePath of listFiles(root)) {
+    const absolute = path.join(root, relativePath);
+    const stat = fs.statSync(absolute);
+    if (stat.size === 0 || stat.size > MAX_SECRET_SCAN_BYTES) continue;
+    let source;
+    try {
+      source = fs.readFileSync(absolute, 'utf8');
+    } catch {
+      continue;
+    }
+    if (source.includes('\u0000')) continue;
+    for (const rule of LIKELY_SECRET_PATTERNS) {
+      if (rule.pattern.test(source)) {
+        violations.push(`${relativePath} (${rule.name})`);
+        break;
+      }
+    }
+  }
+  if (violations.length > 0) {
+    throw new Error(`Likely production credential material detected: ${violations.join(', ')}`);
   }
 }
 
@@ -82,6 +123,7 @@ function checkProject(root = process.cwd()) {
   }
 
   assertNoForbiddenProjectFiles(root);
+  assertNoLikelySecretContent(root);
   return true;
 }
 
@@ -95,4 +137,10 @@ if (require.main === module) {
   }
 }
 
-module.exports = { assertNoForbiddenProjectFiles, checkProject, listFiles };
+module.exports = {
+  assertNoForbiddenProjectFiles,
+  assertNoLikelySecretContent,
+  checkProject,
+  isForbiddenProjectFile,
+  listFiles
+};
