@@ -62,7 +62,7 @@ test('protected storage capability gates writes and never falls back to plaintex
   await assert.rejects(fs.access(path.join(unavailable.root, 'credential-store.json')));
 
   const basicText = await createStore({ safeStorage: createFakeSafeStorage({ backend: 'basic_text' }) });
-  assert.equal(basicText.store.getStatus().state, 'unavaile');
+  assert.equal(basicText.store.getStatus().state, 'unavailable');
   await assert.rejects(
     basicText.store.createSecret({ provider: 'example', accountRefId: null, kind: 'access-token', value: SENTINEL, expiresAt: null }),
     (error) => error.code === 'SECRET_STORAGE_UNAVAILABLE'
