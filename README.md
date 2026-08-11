@@ -1,23 +1,35 @@
 # SwayForge
 
-SwayForge is a local-first desktop application for AI-assisted social-content creation, management and publishing. The long-term product is designed to reduce the work of running social accounts while keeping deterministic application rules and user controls authoritative.
+SwayForge is a local-first desktop application for AI-assisted social-content creation, management and publishing. The product goal is to reduce the work of running social accounts without taking control away from the user: models suggest and generate, while deterministic application rules govern what is allowed.
 
-## Current status
+## v0.1.0 — Application Foundation
 
-This repository state contains the **Application Foundation shell, local data foundation and local AI runtime boundary**. It establishes a secure Electron main/preload/renderer boundary, authoritative local persistence for non-secret application state and creator-project metadata, and a provider-neutral AI runtime with Ollama as the first local provider.
+The v0.1.0 foundation provides the secure local desktop substrate that later media intelligence, Content Studio, social publishing, trends, scheduling and Autopilot releases build on.
 
-It does **not** yet connect social accounts, import creator media, expose content-generation workflows to the renderer, publish content, collect trends, schedule posts or run Autopilot. The local AI layer can detect Ollama/model availability and provides a bounded internal text-generation contract for later AI features.
+Included in v0.1.0:
 
-There is no cloud AI fallback. SwayForge only permits approved loopback Ollama endpoints and rejects documented Ollama cloud-model identifiers before inference. Ollama itself also supports a local-only server mode; configuring that mode is recommended as defence in depth because current Ollama releases can otherwise route cloud models through the local API.
+- secure Electron main/preload/renderer boundaries with context isolation, renderer sandboxing and no unrestricted Node.js access;
+- versioned local application/project persistence under Electron per-user data storage, with revision conflicts and conservative corrupt-state handling;
+- a separate protected credential-storage boundary that does not expose raw secrets to the renderer;
+- a provider-neutral local AI runtime with Ollama as the first provider, restricted to approved loopback endpoints and local-capable models;
+- structured AI task/context/response contracts with application-side schema and reference validation;
+- managed local image/video import with streamed SHA-256 exact-duplicate detection and non-destructive source handling;
+- a shared navigation/design system for Home, Projects, Media and Settings, with future destinations visibly unavailable rather than simulated;
+- persistent Light, Dark and Follow System appearance settings;
+- privacy-safe bounded local diagnostics with explicit export/clear controls;
+- Linux/Windows automated quality, privacy, security, workflow and lint checks;
+- Windows x64 unpacked packaging and an NSIS installer foundation with non-destructive uninstall behaviour.
+
+v0.1.0 does **not** connect social accounts, publish or schedule posts, collect trends, provide analytics, edit/render social videos, run Autopilot, use cloud AI, or upload creator media to third parties.
 
 ## Prerequisites
 
-- A supported Windows development environment is the primary target.
+- Windows x64 is the verified packaging target for v0.1.0.
 - Node.js 22.12.0 or later.
 - npm.
-- Ollama is optional for application startup and non-AI workflows. When used, the v0.1.0 runtime expects an approved local loopback Ollama service.
+- Ollama is optional for application startup and non-AI workflows. When enabled, SwayForge accepts approved local loopback Ollama endpoints only.
 
-Electron is pinned as a development dependency. A verified `package-lock.json` still needs to be generated in an environment with npm registry access before `npm ci` can satisfy the release acceptance criterion.
+No model is downloaded automatically and there is no cloud-AI fallback.
 
 ## Developer commands
 
@@ -29,65 +41,78 @@ npm run check
 npm run lint
 ```
 
-- `npm start` launches the Electron application from source.
-- `npm test` runs the architecture, security, storage, migration, integrity and local-AI runtime tests.
-- `npm run check` verifies required project structure and rejects obvious secret/runtime/private-media file classes.
-- `npm run lint` performs dependency-free JavaScript syntax and repository style/safety checks.
+Focused checks include:
+
+```bash
+npm run test:smoke
+npm run test:windows
+npm run check:privacy
+npm run check:security
+npm run check:workflow
+npm run check:package
+npm run smoke:electron
+```
+
+Windows packaging commands:
+
+```bash
+npm run pack:win
+npm run check:package-output
+npm run dist:win
+```
+
+`pack:win` builds the unpacked Windows x64 application. `dist:win` builds the configured NSIS installer. The v0.1.0 installer is unsigned, so Windows reputation/SmartScreen warnings may appear. Packaging does not publish a release and no auto-update behaviour is included.
 
 ## Source layout
 
 ```text
 src/
-  main/       Trusted Electron lifecycle and IPC registration
-  preload/    Narrow renderer capability bridge
-  renderer/   Local HTML/CSS/JS application shell
-  core/       Reusable application contracts
-  security/   Electron window/navigation policy
-  storage/    Versioned local application/project persistence and migrations
-  ai/         Provider-neutral local AI runtime and provider implementations
-scripts/      Foundation project and lint checks
-tests/        Architecture/security/storage/AI regression tests
+  main/         Trusted Electron lifecycle, IPC and application services
+  preload/      Narrow renderer capability bridge
+  renderer/     Local HTML/CSS/JS application shell
+  core/         Shared application contracts
+  storage/      Versioned local application/project persistence
+  security/     Window, navigation and credential boundaries
+  ai/           Local AI runtime, providers and structured task contracts
+  media/        Managed local media import/storage foundation
+  settings/     Non-secret settings model and service
+  diagnostics/  Privacy-safe local diagnostic event storage
+scripts/        Quality, privacy, security, packaging and smoke checks
+tests/          Deterministic architecture and regression coverage
+build/          Windows packaging configuration and local build assets
 ```
 
-Later work should add substantial modules under deliberate directories such as `src/media` and `src/diagnostics` only when those modules actually exist. Empty architectural folders are not created merely for appearance.
+## Local data and media
 
-## Local data foundation
+Normal application/project state is stored beneath Electron's per-user `userData` location rather than the installation directory. Writes are validated and staged; invalid or unsupported existing state is preserved rather than silently replaced with a blank store.
 
-SwayForge uses a dependency-free JSON repository for the initial v0.1.0 state model. The trusted main process resolves a stable `data` subdirectory beneath Electron's per-user `userData` location; renderer requests cannot choose paths or issue arbitrary filesystem/database operations.
+Creator source media is never moved, deleted or modified by import. Supported media is copied into SwayForge-managed local storage outside the source/install tree. Exact duplicate detection uses streamed SHA-256 hashing so large video files are not read wholly into memory.
 
-The authoritative file is `workspace.json`. `workspace.previous.json` retains the immediately previous valid generation after a successful replacement. Candidate writes are validated, written to a sibling staging file, flushed, moved through the previous-copy boundary and re-read for verification. If an existing store is unreadable, structurally invalid or unsupported, SwayForge preserves it and refuses to initialise blank replacement state.
+Protected credentials remain a separate data class and are not stored in normal project/application state. Uninstall is configured not to delete the per-user SwayForge data directory by default.
 
-The initial store schema version is **1**, separate from the package version. Ordered migration infrastructure includes a deterministic schema `0 -> 1` scaffold for synthetic/pre-release compatibility testing. Mutations are serialized and use a monotonic store revision; stale callers must supply the expected revision and receive a conflict instead of silently overwriting newer work.
+## Local AI boundary
 
-Creator projects contain stable UUIDs, project schema/revision, title, draft/archive lifecycle, stable `mediaIds` references and a bounded `extensions` object for later project modules. Raw image/video bytes are not part of ordinary state. No derived cache is required by this foundation; any future cache must remain rebuildable and non-authoritative.
+AI features depend on the application `AiRuntimeService`, not direct provider calls from renderer code. Ollama traffic originates in trusted main-process code and is restricted to approved loopback hosts. Cloud-model identifiers are rejected for the v0.1.0 local-only contract.
 
-OAuth access/refresh tokens, client secrets, signing keys, session cookies, encryption keys and passwords do not belong in this store and are rejected from normal extensible state by key policy. Protected credentials belong to the dedicated secure-storage workstream. This previous-generation mechanism is a write-integrity primitive, **not** a claim of complete backup/restore support.
-
-## Local AI runtime
-
-AI features depend on `AiRuntimeService`, not provider-specific HTTP calls. Ollama is implemented behind that service and uses only the current local API surface needed for runtime version/model discovery, model capability inspection and bounded non-streaming chat generation.
-
-The runtime accepts bounded messages, model references, output-token limits, timeouts, optional temperature and optional structured-output schemas. It generates request IDs locally, permits one active inference by default, supports cancellation and external abort signals, bounds provider response size and returns structured success/failure envelopes. Model output remains untrusted text; tool-call output is rejected and never executed.
-
-The renderer only receives typed AI runtime status/refresh operations in this workstream. It does not receive generic HTTP access, raw provider endpoints or direct generation IPC. Generation is intentionally reserved for the higher-level AI contract workstream.
-
-No model is automatically pulled or downloaded. No prompt, generated response or conversation history is persisted by this runtime, and normal AI diagnostics contain only non-sensitive request metadata such as provider, request ID, model identifier, outcome category and coarse duration.
+Structured AI tasks use bounded allowlisted context, treat user/model text as untrusted data, validate returned JSON and application references, and reject executable/tool-style authority. AI output cannot directly perform application actions or mutate project/media state.
 
 ## Security and privacy baseline
 
-- Renderer Node.js integration is disabled.
-- Context isolation and renderer sandboxing are enabled.
-- The preload bridge exposes named, allowlisted capabilities only.
-- New windows, external navigation and webviews are denied by the foundation policy.
-- The renderer CSP disables network connections.
-- There is no arbitrary filesystem, shell, HTTP, environment-variable or credential bridge.
-- Local persistence is metadata/state only; credentials and raw creator media are separate data classes.
-- Ollama traffic originates in trusted main-process service code and is restricted to approved HTTP loopback hosts; redirects are rejected.
-- Documented Ollama cloud-model identifiers are blocked, no cloud provider exists and no model-pull endpoint is used.
-- There is no telemetry, analytics, cloud database/sync or social-platform network traffic in this foundation.
+- No telemetry or behavioural analytics.
+- No remote crash reporting.
+- No cloud AI or cloud media storage.
+- No social-platform API or publishing network path in v0.1.0.
+- No arbitrary renderer filesystem, shell, network, environment-variable or credential access.
+- No raw credential values exposed to renderer code or ordinary diagnostics.
+- Diagnostics exclude prompts/responses, creator content and credential payloads.
+- Package policy checks reject private runtime data, creator media, credentials, model binaries and development-only material from release output.
 
-**Never commit production social credentials, OAuth tokens, private creator media, runtime databases, local state, logs or model caches to this repository.** Use fictional/synthetic data for tests and development fixtures.
+**Never commit production social credentials, OAuth tokens, private creator media, runtime databases, local state, diagnostic exports, signing material or model caches to this repository.** Tests and fixtures must use fictional/synthetic data.
 
 ## Versioning
 
-The application displays the version reported by Electron from `package.json`; renderer code does not carry a separate hard-coded application version. Data schemas use their own version metadata. Final v0.1.0 release metadata is owned by the release-integration workstream.
+The authoritative application version is `package.json`. Electron reports that version to the renderer/About surface, and Windows artifact names are derived from the same value. Data schemas maintain separate schema versions.
+
+Current application release metadata: **v0.1.0**.
+
+See `CHANGELOG.md` for release notes and `docs/release-verification-v0.1.0.md` for the release verification record.
