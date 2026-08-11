@@ -6,8 +6,12 @@ const { app, BrowserWindow, dialog, ipcMain, session } = require('electron');
 const {
   IPC_CHANNELS,
   createApplicationInfo,
+  isAiRefreshRequest,
+  isAiStatusRequest,
   isHealthRequest
 } = require('../core/application-contracts.cjs');
+const { AiRuntimeService } = require('../ai/ai-runtime-service.cjs');
+const { OllamaProvider } = require('../ai/providers/ollama-provider.cjs');
 const {
   STORAGE_IPC_CHANNELS,
   validateApplicationUpdateRequest,
@@ -34,6 +38,17 @@ let primaryWindow = null;
 let handlersRegistered = false;
 let permissionsLockedDown = false;
 let localDataRepository = null;
+let aiRuntime = null;
+
+function getAiRuntime() {
+  if (!aiRuntime) {
+    aiRuntime = new AiRuntimeService({
+      provider: new OllamaProvider(),
+      logger: (event) => console.info('[ai-runtime]', event)
+    });
+  }
+  return aiRuntime;
+}
 
 function sanitiseStorageError(error) {
   const code = typeof error?.code === 'string' ? error.code : 'STORAGE_ERROR';
@@ -83,6 +98,16 @@ function registerIpcHandlers(repository = localDataRepository) {
   ipcMain.handle(IPC_CHANNELS.healthCheck, (_event, request) => {
     if (!isHealthRequest(request)) throw new TypeError('Invalid health-check request.');
     return Object.freeze({ status: 'ok' });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.aiRuntimeStatus, (_event, request) => {
+    if (!isAiStatusRequest(request)) throw new TypeError('Invalid AI status request.');
+    return getAiRuntime().getStatus();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.aiRuntimeRefresh, (_event, request) => {
+    if (!isAiRefreshRequest(request)) throw new TypeError('Invalid AI refresh request.');
+    return getAiRuntime().getStatus({ refresh: true });
   });
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateRead, () =>
@@ -181,6 +206,7 @@ async function startApplication() {
   registerIpcHandlers();
   lockDownRendererPermissions();
   createPrimaryWindow();
+  void getAiRuntime().getStatus({ refresh: true }).catch(() => {});
 }
 
 app.whenReady().then(startApplication).catch((error) => {
@@ -200,12 +226,17 @@ app.whenReady().then(startApplication).catch((error) => {
   app.quit();
 });
 
+app.on('before-quit', () => {
+  aiRuntime?.shutdown();
+});
+
 app.on('window-all-closed', () => {
   app.quit();
 });
 
 module.exports = {
   createPrimaryWindow,
+  getAiRuntime,
   initialiseLocalDataRepository,
   lockDownRendererPermissions,
   registerIpcHandlers,

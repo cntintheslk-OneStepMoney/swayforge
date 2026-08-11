@@ -9,9 +9,13 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const packageJson = require('../package.json');
 const {
+  AI_REFRESH_REQUEST,
+  AI_STATUS_REQUEST,
   HEALTH_REQUEST,
   IPC_CHANNELS,
   createApplicationInfo,
+  isAiRefreshRequest,
+  isAiStatusRequest,
   isHealthRequest
 } = require('../src/core/application-contracts.cjs');
 const {
@@ -34,10 +38,13 @@ test('package metadata and required developer commands are authoritative', () =>
   }
 });
 
-test('main and preload entries exist and renderer assets resolve locally', () => {
+test('main, preload, AI runtime, and renderer assets resolve locally', () => {
   for (const relativePath of [
     packageJson.main,
     'src/preload/preload-bridge.cjs',
+    'src/ai/runtime-contracts.cjs',
+    'src/ai/ai-runtime-service.cjs',
+    'src/ai/providers/ollama-provider.cjs',
     'src/renderer/index.html',
     'src/renderer/fallback.html',
     'src/renderer/renderer-app.js',
@@ -78,16 +85,23 @@ test('navigation policy only normalises local file documents', () => {
   assert.match(policySource, /preventDefault\(\)/);
 });
 
-test('preload exposes only named application capabilities', () => {
+test('preload exposes only named application and AI status capabilities', () => {
   const preloadSource = read('src/preload/preload-bridge.cjs');
   assert.match(preloadSource, /getApplicationInfo:/);
   assert.match(preloadSource, /healthCheck:/);
+  assert.match(preloadSource, /getAiRuntimeStatus:/);
+  assert.match(preloadSource, /refreshAiRuntimeStatus:/);
   assert.doesNotMatch(preloadSource, /invoke\s*:\s*\(/);
   assert.doesNotMatch(preloadSource, /send\s*:\s*\(/);
   assert.doesNotMatch(preloadSource, /on\s*:\s*\(/);
   assert.doesNotMatch(preloadSource, /shell/);
   assert.doesNotMatch(preloadSource, /process\.env/);
-  assert.deepEqual(Object.keys(IPC_CHANNELS).sort(), ['applicationInfo', 'healthCheck']);
+  assert.deepEqual(Object.keys(IPC_CHANNELS).sort(), [
+    'aiRuntimeRefresh',
+    'aiRuntimeStatus',
+    'applicationInfo',
+    'healthCheck'
+  ]);
 });
 
 test('sandbox-safe preload protocol mirrors the trusted contract exactly', () => {
@@ -95,8 +109,10 @@ test('sandbox-safe preload protocol mirrors the trusted contract exactly', () =>
   for (const channel of Object.values(IPC_CHANNELS)) {
     assert.match(preloadSource, new RegExp(channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
-  assert.match(preloadSource, new RegExp(HEALTH_REQUEST.kind));
-  assert.match(preloadSource, new RegExp(`version: ${HEALTH_REQUEST.version}`));
+  for (const request of [HEALTH_REQUEST, AI_STATUS_REQUEST, AI_REFRESH_REQUEST]) {
+    assert.match(preloadSource, new RegExp(request.kind));
+    assert.match(preloadSource, new RegExp(`version: ${request.version}`));
+  }
   assert.doesNotMatch(preloadSource, /require\(['"]\.\.?\//);
 });
 
@@ -107,11 +123,14 @@ test('main process denies renderer permissions not needed by the foundation', ()
   assert.match(mainSource, /callback\(false\)/);
 });
 
-test('health IPC input is narrow and validated', () => {
+test('health and AI status IPC inputs are narrow and validated', () => {
   assert.equal(isHealthRequest(HEALTH_REQUEST), true);
+  assert.equal(isAiStatusRequest(AI_STATUS_REQUEST), true);
+  assert.equal(isAiRefreshRequest(AI_REFRESH_REQUEST), true);
   assert.equal(isHealthRequest({ ...HEALTH_REQUEST, extra: true }), false);
   assert.equal(isHealthRequest({ kind: HEALTH_REQUEST.kind, version: 2 }), false);
-  assert.equal(isHealthRequest('renderer-health-check'), false);
+  assert.equal(isAiStatusRequest({ ...AI_STATUS_REQUEST, version: 2 }), false);
+  assert.equal(isAiRefreshRequest('ai-runtime-refresh'), false);
 });
 
 test('application info contract validates bounded string facts', () => {
@@ -142,6 +161,7 @@ test('minimal renderer has semantic landmarks and does not claim future features
   assert.match(html, /<main\b/);
   assert.match(html, /<h1>SwayForge<\/h1>/);
   assert.match(html, /intentionally not enabled yet/);
+  assert.match(html, /Local AI/);
   assert.match(html, /No telemetry/);
 });
 
