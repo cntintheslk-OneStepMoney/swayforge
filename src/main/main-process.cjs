@@ -16,9 +16,9 @@ const {
   STORAGE_IPC_CHANNELS,
   validateApplicationUpdateRequest,
   validateArchiveProjectRequest,
-  validateCreateProjectRequest,
   validateProjectReadRequest,
-  validateUpdateProjectRequest
+  validateRendererCreateProjectRequest,
+  validateRendererUpdateProjectRequest
 } = require('../storage/storage-contracts.cjs');
 const {
   LocalDataRepository,
@@ -30,6 +30,12 @@ const {
 } = require('../security/secret-contracts.cjs');
 const { ProtectedSecretStore } = require('../security/protected-secret-store.cjs');
 const {
+  MEDIA_IPC_CHANNELS,
+  isChooseMediaRequest,
+  validateProjectMediaRequest
+} = require('../media/media-contracts.cjs');
+const { MediaImportService } = require('../media/media-import-service.cjs');
+const {
   WINDOW_WEB_PREFERENCES,
   installNavigationGuards
 } = require('../security/electron-window-policy.cjs');
@@ -39,12 +45,14 @@ const RENDERER_ENTRY = path.join(RENDERER_DIRECTORY, 'index.html');
 const FALLBACK_ENTRY = path.join(RENDERER_DIRECTORY, 'fallback.html');
 const DATA_DIRECTORY_NAME = 'data';
 const CREDENTIAL_DIRECTORY_NAME = 'credentials';
+const MEDIA_DIRECTORY_NAME = 'media';
 
 let primaryWindow = null;
 let handlersRegistered = false;
 let permissionsLockedDown = false;
 let localDataRepository = null;
 let protectedSecretStore = null;
+let mediaImportService = null;
 let aiRuntime = null;
 
 function getAiRuntime() {
@@ -62,6 +70,11 @@ function getProtectedSecretStore() {
   return protectedSecretStore;
 }
 
+function getMediaImportService() {
+  if (!mediaImportService) throw new Error('Media import service is not initialised.');
+  return mediaImportService;
+}
+
 function sanitiseStorageError(error) {
   const code = typeof error?.code === 'string' ? error.code : 'STORAGE_ERROR';
   const messages = Object.freeze({
@@ -69,11 +82,33 @@ function sanitiseStorageError(error) {
     STORAGE_NOT_FOUND: 'The requested local project no longer exists.',
     PROJECT_ARCHIVED: 'This project is archived and cannot be edited.',
     STORAGE_CORRUPT: 'SwayForge local data could not be read safely. Existing data was preserved.',
-    UNSUPPORTED_SCHEMA: 'This local data was created by an unsupported SwayForge data schema.'
+    UNSUPPORTED_SCHEMA: 'This local data was created by an unsupported SwayForge data schema.',
+    MEDIA_NOT_FOUND: 'The requested local media item no longer exists.',
+    MEDIA_DUPLICATE: 'Identical local media is already registered.'
   });
   return Object.freeze({
     code,
     message: messages[code] ?? 'The local data operation could not be completed safely.'
+  });
+}
+
+function sanitiseMediaError(error) {
+  const code = typeof error?.code === 'string' ? error.code : 'MEDIA_IMPORT_FAILED';
+  const messages = Object.freeze({
+    MEDIA_SOURCE_MISSING: 'The selected media file is no longer available.',
+    MEDIA_SOURCE_INVALID: 'The selected item is not a supported regular media file.',
+    MEDIA_SIZE_UNSUPPORTED: 'The selected media file size is not supported.',
+    MEDIA_TYPE_UNSUPPORTED: 'That media format is not supported by this foundation.',
+    MEDIA_SIGNATURE_INVALID: 'The selected file content does not match its supported media format.',
+    MEDIA_COPY_VERIFY_FAILED: 'The local managed copy could not be verified safely.',
+    MEDIA_PATH_INVALID: 'The managed media destination could not be resolved safely.',
+    MEDIA_ID_INVALID: 'A safe local media identity could not be allocated.',
+    STORAGE_CONFLICT: 'Local data changed during import. Try the import again.',
+    STORAGE_CORRUPT: 'SwayForge local data could not be updated safely. Existing data was preserved.'
+  });
+  return Object.freeze({
+    code,
+    message: messages[code] ?? 'The selected media could not be imported safely.'
   });
 }
 
@@ -91,10 +126,42 @@ async function storageResult(operation) {
   }
 }
 
-function registerIpcHandlers(repository = localDataRepository, secretStore = protectedSecretStore) {
+async function mediaResult(operation) {
+  try {
+    return Object.freeze({ ok: true, value: await operation() });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      return Object.freeze({
+        ok: false,
+        error: Object.freeze({ code: 'INVALID_REQUEST', message: 'The media request was invalid.' })
+      });
+    }
+    return Object.freeze({ ok: false, error: sanitiseMediaError(error) });
+  }
+}
+
+async function chooseMediaFile() {
+  const options = Object.freeze({
+    title: 'Import media',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Supported media', extensions: ['jpg', 'jpeg', 'png', 'mp4', 'mov'] }
+    ]
+  });
+  return primaryWindow && !primaryWindow.isDestroyed()
+    ? dialog.showOpenDialog(primaryWindow, options)
+    : dialog.showOpenDialog(options);
+}
+
+function registerIpcHandlers(
+  repository = localDataRepository,
+  secretStore = protectedSecretStore,
+  mediaService = mediaImportService
+) {
   if (handlersRegistered) return;
   if (!repository) throw new Error('Local data repository must be ready before IPC registration.');
   if (!secretStore) throw new Error('Protected credential storage must be initialised before IPC registration.');
+  if (!mediaService) throw new Error('Media import service must be initialised before IPC registration.');
   handlersRegistered = true;
 
   ipcMain.handle(IPC_CHANNELS.applicationInfo, () =>
@@ -135,19 +202,40 @@ function registerIpcHandlers(repository = localDataRepository, secretStore = pro
     storageResult(() => repository.updateApplicationState(validateApplicationUpdateRequest(request)))
   );
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectCreate, (_event, request) =>
-    storageResult(() => repository.createProject(validateCreateProjectRequest(request)))
+    storageResult(() => repository.createProject(validateRendererCreateProjectRequest(request)))
   );
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectRead, (_event, request) =>
     storageResult(() => repository.readProject(validateProjectReadRequest(request)))
   );
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectUpdate, (_event, request) =>
-    storageResult(() => repository.updateProject(validateUpdateProjectRequest(request)))
+    storageResult(() => repository.updateProject(validateRendererUpdateProjectRequest(request)))
   );
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectList, () =>
     storageResult(() => repository.listProjects())
   );
   ipcMain.handle(STORAGE_IPC_CHANNELS.projectArchive, (_event, request) =>
     storageResult(() => repository.archiveProject(validateArchiveProjectRequest(request)))
+  );
+
+  ipcMain.handle(MEDIA_IPC_CHANNELS.chooseImport, async (_event, request) => {
+    if (!isChooseMediaRequest(request)) {
+      return Object.freeze({
+        ok: false,
+        error: Object.freeze({ code: 'INVALID_REQUEST', message: 'The media request was invalid.' })
+      });
+    }
+    const selection = await chooseMediaFile();
+    if (selection.canceled || selection.filePaths.length === 0) {
+      return Object.freeze({ ok: true, value: Object.freeze({ status: 'cancelled' }) });
+    }
+    return mediaResult(() => mediaService.importFile(selection.filePaths[0]));
+  });
+  ipcMain.handle(MEDIA_IPC_CHANNELS.list, () => mediaResult(() => mediaService.listMedia()));
+  ipcMain.handle(MEDIA_IPC_CHANNELS.attach, (_event, request) =>
+    mediaResult(() => mediaService.attachMediaToProject(validateProjectMediaRequest(request)))
+  );
+  ipcMain.handle(MEDIA_IPC_CHANNELS.detach, (_event, request) =>
+    mediaResult(() => mediaService.detachMediaFromProject(validateProjectMediaRequest(request)))
   );
 }
 
@@ -167,6 +255,16 @@ async function initialiseProtectedSecretStore() {
     safeStorage
   });
   return protectedSecretStore;
+}
+
+async function initialiseMediaImportService() {
+  if (mediaImportService) return mediaImportService;
+  if (!localDataRepository) throw new Error('Local data repository must be ready before media import initialisation.');
+  mediaImportService = await MediaImportService.open({
+    rootDirectory: path.join(app.getPath('userData'), MEDIA_DIRECTORY_NAME),
+    repository: localDataRepository
+  });
+  return mediaImportService;
 }
 
 function lockDownRendererPermissions() {
@@ -232,6 +330,7 @@ function createPrimaryWindow() {
 async function startApplication() {
   await initialiseLocalDataRepository();
   await initialiseProtectedSecretStore();
+  await initialiseMediaImportService();
   registerIpcHandlers();
   lockDownRendererPermissions();
   createPrimaryWindow();
@@ -266,11 +365,15 @@ app.on('window-all-closed', () => {
 module.exports = {
   createPrimaryWindow,
   getAiRuntime,
+  getMediaImportService,
   getProtectedSecretStore,
   initialiseLocalDataRepository,
-  initialiseProtectedSecretStore,
+  initialiseMediaImportService,
+  initialiseProteectedSecretStor,
   lockDownRendererPermissions,
+  mediaResult,
   registerIpcHandlers,
+  sanitiseMediaError,
   sanitiseStorageError,
   startApplication,
   storageResult

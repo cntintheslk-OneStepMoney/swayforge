@@ -23,10 +23,17 @@ const STORAGE_IPC_CHANNELS = Object.freeze({
 const SECRET_IPC_CHANNELS = Object.freeze({
   status: 'swayforge:secret-storage:status'
 });
+const MEDIA_IPC_CHANNELS = Object.freeze({
+  chooseImport: 'swayforge:media:choose-import',
+  list: 'swayforge:media:list',
+  attach: 'swayforge:media:attach',
+  detach: 'swayforge:media:detach'
+});
 const HEALTH_REQUEST = Object.freeze({ kind: 'renderer-health-check', version: 1 });
 const AI_STATUS_REQUEST = Object.freeze({ kind: 'ai-runtime-status', version: 1 });
 const AI_REFRESH_REQUEST = Object.freeze({ kind: 'ai-runtime-refresh', version: 1 });
 const SECRET_STATUS_REQUEST = Object.freeze({ kind: 'secret-storage-status', version: 1 });
+const MEDIA_CHOOSE_REQUEST = Object.freeze({ kind: 'choose-media-import', version: 1 });
 
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
@@ -40,7 +47,11 @@ const bridge = Object.freeze({
   getProject: (projectId) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectRead, { projectId }),
   updateProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectUpdate, request),
   listProjects: () => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectList),
-  archiveProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectArchive, request)
+  archiveProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectArchive, request),
+  chooseAndImportMedia: () => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.chooseImport, MEDIA_CHOOSE_REQUEST),
+  listMedia: () => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.list),
+  attachMediaToProject: (request) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.attach, request),
+  detachMediaFromProject: (request) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.detach, request)
 });
 
 contextBridge.exposeInMainWorld(BRIDGE_NAME, bridge);
