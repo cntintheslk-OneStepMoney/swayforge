@@ -1,0 +1,46 @@
+name: Synchronise packaging dependency base
+
+on:
+  push:
+    branches:
+      - maintenance/windows-packaging
+    paths:
+      - .github/workflows/sync-packaging-base.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out packaging branch
+        uses: actions/checkout@v6
+        with:
+          ref: maintenance/windows-packaging
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.12.0
+          package-manager-cache: false
+
+      - name: Merge latest quality dependency branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin maintenance/quality-foundation
+          git merge --no-ff --no-commit -X ours origin/maintenance/quality-foundation
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          git rm .github/workflows/sync-packaging-base.yml
+          git add package-lock.json
+          git commit \
+            -m "[v0.1.0][Maintenance] Integrate latest quality dependency fixes" \
+            -m "Purpose: Synchronise Issue #12 with the latest Issue #11 quality branch after concurrent CI fixes landed." \
+            -m "Changes: Merge the corrected lockfile checksum and deterministic test fixes from maintenance/quality-foundation, retain Issue #12 packaging dependencies and remove the temporary sync workflow." \
+            -m "Verification: Final Windows packaging PR CI runs npm ci, full tests, policy gates and packaged installer verification on this integrated tree." \
+            -m "Issue: #12"
+          git push origin HEAD:maintenance/windows-packaging
