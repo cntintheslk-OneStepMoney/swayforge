@@ -8,8 +8,18 @@ $dist = Join-Path $root 'dist'
 $originalAppData = $env:APPDATA
 $runId = "swayforge-package-smoke-$PID-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 $appDataRoot = Join-Path $env:RUNNER_TEMP $runId
-$expectedUserData = Join-Path $appDataRoot 'SwayForge'
-$expectedWorkspace = Join-Path $expectedUserData 'data\workspace.json'
+
+function Find-SwayForgeWorkspace {
+  $matches = @(Get-ChildItem -Path $appDataRoot -Recurse -File -Filter 'workspace.json' -ErrorAction SilentlyContinue)
+  if ($matches.Count -gt 1) {
+    $paths = ($matches | ForEach-Object { $_.FullName }) -join ', '
+    throw "Packaged SwayForge created more than one workspace under the isolated APPDATA root: $paths"
+  }
+  if ($matches.Count -eq 1) {
+    return $matches[0].FullName
+  }
+  return $null
+}
 
 function Start-And-VerifySwayForge([string]$Executable, [string]$Label) {
   if (-not (Test-Path $Executable)) {
@@ -17,21 +27,25 @@ function Start-And-VerifySwayForge([string]$Executable, [string]$Label) {
   }
 
   $process = Start-Process -FilePath $Executable -ArgumentList '--disable-gpu' -PassThru
+  $workspacePath = $null
   try {
     $deadline = (Get-Date).AddSeconds(20)
-    while ((Get-Date) -lt $deadline -and -not (Test-Path $expectedWorkspace)) {
+    while ((Get-Date) -lt $deadline) {
       if ($process.HasExited) {
         throw "$Label exited before local workspace initialisation (exit code $($process.ExitCode))."
       }
+      $workspacePath = Find-SwayForgeWorkspace
+      if ($workspacePath) { break }
       Start-Sleep -Milliseconds 500
     }
 
-    if (-not (Test-Path $expectedWorkspace)) {
-      throw "$Label did not initialise workspace state under Electron userData."
+    if (-not $workspacePath) {
+      throw "$Label remained open but did not initialise workspace state beneath the isolated APPDATA root."
     }
     if ($process.HasExited) {
       throw "$Label exited unexpectedly after initialisation (exit code $($process.ExitCode))."
     }
+    return $workspacePath
   }
   finally {
     if (-not $process.HasExited) {
@@ -47,56 +61,64 @@ try {
 
   if (-not $Installer) {
     $unpackedExe = Join-Path $dist 'win-unpacked\SwayForge.exe'
-    Start-And-VerifySwayForge $unpackedExe 'Unpacked SwayForge'
-    Start-And-VerifySwayForge $unpackedExe 'Restarted unpacked SwayForge'
+    $workspacePath = Start-And-VerifySwayForge $unpackedExe 'Unpacked SwayForge'
+    $restartWorkspacePath = Start-And-VerifySwayForge $unpackedExe 'Restarted unpacked SwayForge'
+    if ($restartWorkspacePath -ne $workspacePath) {
+      throw "SwayForge restart used a different workspace path: $restartWorkspacePath"
+    }
 
     $leakedWorkspace = Get-ChildItem -Path (Join-Path $dist 'win-unpacked') -Recurse -File -Filter 'workspace.json' -ErrorAction SilentlyContinue
     if ($leakedWorkspace) {
       throw 'Packaged application wrote workspace.json inside its installation/output directory.'
     }
 
-    Write-Output "Unpacked Windows launch/restart smoke passed; mutable workspace is outside the package at $expectedWorkspace"
-    exit 0
+    Write-Output "Unpacked Windows launch/restart smoke passed; mutable workspace is outside the package at $workspacePath"
   }
+  else {
+    $package = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+    $expectedInstallerName = "SwayForge-$($package.version)-win-x64-setup.exe"
+    $installerPath = Join-Path $dist $expectedInstallerName
+    if (-not (Test-Path $installerPath)) {
+      throw "Expected NSIS installer is missing: $expectedInstallerName"
+    }
 
-  $package = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
-  $expectedInstallerName = "SwayForge-$($package.version)-win-x64-setup.exe"
-  $installerPath = Join-Path $dist $expectedInstallerName
-  if (-not (Test-Path $installerPath)) {
-    throw "Expected NSIS installer is missing: $expectedInstallerName"
-  }
+    $installRoot = Join-Path $env:RUNNER_TEMP "swayforge-installed-$PID"
+    $installerProcess = Start-Process -FilePath $installerPath -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
+    if ($installerProcess.ExitCode -ne 0) {
+      throw "NSIS installer failed with exit code $($installerProcess.ExitCode)."
+    }
 
-  $installRoot = Join-Path $env:RUNNER_TEMP "swayforge-installed-$PID"
-  $installerProcess = Start-Process -FilePath $installerPath -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
-  if ($installerProcess.ExitCode -ne 0) {
-    throw "NSIS installer failed with exit code $($installerProcess.ExitCode)."
-  }
+    $installedExe = Join-Path $installRoot 'SwayForge.exe'
+    $workspacePath = Start-And-VerifySwayForge $installedExe 'Installed SwayForge'
 
-  $installedExe = Join-Path $installRoot 'SwayForge.exe'
-  Start-And-VerifySwayForge $installedExe 'Installed SwayForge'
+    $uninstaller = Get-ChildItem -Path $installRoot -File -Filter 'Uninstall*.exe' | Select-Object -First 1
+    if (-not $uninstaller) {
+      throw 'NSIS uninstall executable was not created.'
+    }
 
-  $uninstaller = Get-ChildItem -Path $installRoot -File -Filter 'Uninstall*.exe' | Select-Object -First 1
-  if (-not $uninstaller) {
-    throw 'NSIS uninstall executable was not created.'
-  }
+    $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
+    if ($uninstallProcess.ExitCode -ne 0) {
+      throw "NSIS uninstaller failed with exit code $($uninstallProcess.ExitCode)."
+    }
 
-  $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
-  if ($uninstallProcess.ExitCode -ne 0) {
-    throw "NSIS uninstaller failed with exit code $($uninstallProcess.ExitCode)."
-  }
+    $deadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $deadline -and (Test-Path $installedExe)) {
+      Start-Sleep -Milliseconds 500
+    }
+    if (Test-Path $installedExe) {
+      throw 'Installed SwayForge executable remained after uninstall.'
+    }
+    if (-not (Test-Path $workspacePath)) {
+      throw 'NSIS uninstall removed creator application data; this is forbidden for Issue #12.'
+    }
 
-  $deadline = (Get-Date).AddSeconds(15)
-  while ((Get-Date) -lt $deadline -and (Test-Path $installedExe)) {
-    Start-Sleep -Milliseconds 500
+    Write-Output "NSIS install/launch/uninstall smoke passed; application data was preserved at $workspacePath"
   }
-  if (Test-Path $installedExe) {
-    throw 'Installed SwayForge executable remained after uninstall.'
-  }
-  if (-not (Test-Path $expectedWorkspace)) {
-    throw 'NSIS uninstall removed creator application data; this is forbidden for Issue #12.'
-  }
-
-  Write-Output "NSIS install/launch/uninstall smoke passed; application data was preserved at $expectedWorkspace"
+}
+catch {
+  $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+  Write-Output "::error file=scripts/smoke-packaged-windows.ps1,title=Windows packaged smoke failed::$message"
+  throw
 }
 finally {
   $env:APPDATA = $originalAppData
