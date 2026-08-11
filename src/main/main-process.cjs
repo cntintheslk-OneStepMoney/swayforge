@@ -9,6 +9,18 @@ const {
   isHealthRequest
 } = require('../core/application-contracts.cjs');
 const {
+  STORAGE_IPC_CHANNELS,
+  validateApplicationUpdateRequest,
+  validateArchiveProjectRequest,
+  validateCreateProjectRequest,
+  validateProjectReadRequest,
+  validateUpdateProjectRequest
+} = require('../storage/storage-contracts.cjs');
+const {
+  LocalDataRepository,
+  StorageCorruptionError
+} = require('../storage/local-data-repository.cjs');
+const {
   WINDOW_WEB_PREFERENCES,
   installNavigationGuards
 } = require('../security/electron-window-policy.cjs');
@@ -16,13 +28,45 @@ const {
 const RENDERER_DIRECTORY = path.join(__dirname, '..', 'renderer');
 const RENDERER_ENTRY = path.join(RENDERER_DIRECTORY, 'index.html');
 const FALLBACK_ENTRY = path.join(RENDERER_DIRECTORY, 'fallback.html');
+const DATA_DIRECTORY_NAME = 'data';
 
 let primaryWindow = null;
 let handlersRegistered = false;
 let permissionsLockedDown = false;
+let localDataRepository = null;
 
-function registerIpcHandlers() {
+function sanitiseStorageError(error) {
+  const code = typeof error?.code === 'string' ? error.code : 'STORAGE_ERROR';
+  const messages = Object.freeze({
+    STORAGE_CONFLICT: 'Local data changed before this action could be saved. Reload and try again.',
+    STORAGE_NOT_FOUND: 'The requested local project no longer exists.',
+    PROJECT_ARCHIVED: 'This project is archived and cannot be edited.',
+    STORAGE_CORRUPT: 'SwayForge local data could not be read safely. Existing data was preserved.',
+    UNSUPPORTED_SCHEMA: 'This local data was created by an unsupported SwayForge data schema.'
+  });
+  return Object.freeze({
+    code,
+    message: messages[code] ?? 'The local data operation could not be completed safely.'
+  });
+}
+
+async function storageResult(operation) {
+  try {
+    return Object.freeze({ ok: true, value: await operation() });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      return Object.freeze({
+        ok: false,
+        error: Object.freeze({ code: 'INVALID_REQUEST', message: 'The local data request was invalid.' })
+      });
+    }
+    return Object.freeze({ ok: false, error: sanitiseStorageError(error) });
+  }
+}
+
+function registerIpcHandlers(repository = localDataRepository) {
   if (handlersRegistered) return;
+  if (!repository) throw new Error('Local data repository must be ready before IPC registration.');
   handlersRegistered = true;
 
   ipcMain.handle(IPC_CHANNELS.applicationInfo, () =>
@@ -40,6 +84,36 @@ function registerIpcHandlers() {
     if (!isHealthRequest(request)) throw new TypeError('Invalid health-check request.');
     return Object.freeze({ status: 'ok' });
   });
+
+  ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateRead, () =>
+    storageResult(() => repository.readApplicationState())
+  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateUpdate, (_event, request) =>
+    storageResult(() => repository.updateApplicationState(validateApplicationUpdateRequest(request)))
+  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.projectCreate, (_event, request) =>
+    storageResult(() => repository.createProject(validateCreateProjectRequest(request)))
+  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.projectRead, (_event, request) =>
+    storageResult(() => repository.readProject(validateProjectReadRequest(request)))
+  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.projectUpdate, (_event, request) =>
+    storageResult(() => repository.updateProject(validateUpdateProjectRequest(request)))
+  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.projectList, () =>
+    storageResult(() => repository.listProjects())
+  );
+  ipcMain.handle(STORAGE_IPC_CHANNELS.projectArchive, (_event, request) =>
+    storageResult(() => repository.archiveProject(validateArchiveProjectRequest(request)))
+  );
+}
+
+async function initialiseLocalDataRepository() {
+  if (localDataRepository) return localDataRepository;
+  localDataRepository = await LocalDataRepository.open({
+    rootDirectory: path.join(app.getPath('userData'), DATA_DIRECTORY_NAME)
+  });
+  return localDataRepository;
 }
 
 function lockDownRendererPermissions() {
@@ -103,17 +177,26 @@ function createPrimaryWindow() {
 }
 
 async function startApplication() {
+  await initialiseLocalDataRepository();
   registerIpcHandlers();
   lockDownRendererPermissions();
   createPrimaryWindow();
 }
 
-app.whenReady().then(startApplication).catch(() => {
-  console.error('[startup] SwayForge failed during application bootstrap.');
-  dialog.showErrorBox(
-    'SwayForge could not start',
-    'Application startup failed before the local workspace was ready.'
-  );
+app.whenReady().then(startApplication).catch((error) => {
+  if (error instanceof StorageCorruptionError) {
+    console.error('[startup] Local application data could not be validated; existing data was preserved.');
+    dialog.showErrorBox(
+      'SwayForge local data needs attention',
+      'Existing local application data could not be read safely. SwayForge preserved it and did not replace it with blank data.'
+    );
+  } else {
+    console.error('[startup] SwayForge failed during application bootstrap.');
+    dialog.showErrorBox(
+      'SwayForge could not start',
+      'Application startup failed before the local workspace was ready.'
+    );
+  }
   app.quit();
 });
 
@@ -123,7 +206,10 @@ app.on('window-all-closed', () => {
 
 module.exports = {
   createPrimaryWindow,
+  initialiseLocalDataRepository,
   lockDownRendererPermissions,
   registerIpcHandlers,
-  startApplication
+  sanitiseStorageError,
+  startApplication,
+  storageResult
 };
