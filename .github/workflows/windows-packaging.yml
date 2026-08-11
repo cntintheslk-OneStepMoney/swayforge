@@ -1,0 +1,94 @@
+name: Windows packaging
+
+on:
+  pull_request:
+    branches:
+      - main
+      - maintenance/quality-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Windows x64 package and NSIS verification
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.12.0
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run complete automated tests
+        run: npm test
+
+      - name: Run canonical project and package policy gates
+        run: npm run check
+
+      - name: Run lint and static checks
+        run: npm run lint
+
+      - name: Build unpacked Windows x64 application
+        run: npm run pack:win
+
+      - name: Inspect unpacked package contents
+        run: npm run check:package-output
+
+      - name: Launch and restart unpacked application
+        shell: pwsh
+        run: ./scripts/smoke-packaged-windows.ps1
+
+      - name: Build Windows x64 NSIS installer
+        run: npm run dist:win
+
+      - name: Re-inspect packaged output and installer naming
+        run: npm run check:package-output
+
+      - name: Install, launch and uninstall while preserving app data
+        shell: pwsh
+        run: ./scripts/smoke-packaged-windows.ps1 -Installer
+
+      - name: Write verified artifact manifest
+        shell: pwsh
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $installer = "dist/SwayForge-$($package.version)-win-x64-setup.exe"
+          if (-not (Test-Path $installer)) { throw "Verified installer is missing: $installer" }
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          @(
+            "product=SwayForge"
+            "version=$($package.version)"
+            "platform=win"
+            "arch=x64"
+            "target=nsis"
+            "file=$(Split-Path $installer -Leaf)"
+            "sha256=$hash"
+            "signed=false"
+            "published=false"
+          ) | Set-Content dist/windows-package-manifest.txt -Encoding utf8
+
+      - name: Upload verified installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swayforge-windows-x64-foundation
+          path: |
+            dist/SwayForge-*-win-x64-setup.exe
+            dist/windows-package-manifest.txt
+          if-no-files-found: error
+          retention-days: 7
