@@ -126,7 +126,7 @@ The Windows packaging workflow performs these steps before any artifact is uploa
 14. Generate a SHA-256 artifact manifest.
 15. Upload the already-verified installer and manifest as a short-retention workflow artifact.
 
-CI artifacts are review evidence only. The workflow does not create a GitHub Release or publish a production installer.
+CI artifacts are review evidence only. The workflow does not create a GitHub Release or publish a production installer. Review readiness requires both the Windows packaging workflow and the repository Git-conventions check to succeed on the current PR head.
 
 ## Local Ollama boundary
 
