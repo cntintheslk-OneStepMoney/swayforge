@@ -90,8 +90,14 @@ function parseJson(text) {
   }
 }
 
+function hasRemoteModelMetadata(model) {
+  if (!model || typeof model !== 'object') return false;
+  return (typeof model.remote_model === 'string' && model.remote_model.length > 0) ||
+    (typeof model.remote_host === 'string' && model.remote_host.length > 0);
+}
+
 function safeModelMetadata(model) {
-  if (!model || typeof model !== 'object') return null;
+  if (!model || typeof model !== 'object' || hasRemoteModelMetadata(model)) return null;
   const name = typeof model.name === 'string' ? model.name : model.model;
   if (typeof name !== 'string') return null;
   try {
@@ -184,6 +190,11 @@ class OllamaProvider {
       body: { model, verbose: false },
       signal
     });
+    if (hasRemoteModelMetadata(payload)) {
+      const error = new Error('Remote-backed Ollama models are not permitted by the local-only runtime.');
+      error.code = 'unsupported';
+      throw error;
+    }
     if (!payload || !Array.isArray(payload.capabilities)) {
       const error = new Error('Ollama model capability response is unsupported.');
       error.code = 'unsupported';
@@ -373,6 +384,7 @@ module.exports = {
   DEFAULT_OLLAMA_ENDPOINT,
   MAX_TRANSPORT_RESPONSE_BYTES,
   OllamaProvider,
+  hasRemoteModelMetadata,
   isCloudModelIdentifier,
   normaliseLocalEndpoint,
   readBoundedText
