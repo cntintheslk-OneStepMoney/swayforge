@@ -24,10 +24,10 @@
     <main id="main-content">
       <section class="foundation-card" aria-labelledby="foundation-heading">
         <div class="status-badge">Foundation build</div>
-        <h2 id="foundation-heading">The desktop shell is ready for the next modules.</h2>
+        <h2 id="foundation-heading">The desktop shell and local AI boundary are ready for the next modules.</h2>
         <p>
-          This build establishes the secure Electron application boundary. Social accounts, media workflows,
-          Ollama features, publishing, trends and automation are intentionally not enabled yet.
+          This build establishes the secure Electron application boundary and local Ollama runtime detection.
+          Content generation, social accounts, media workflows, publishing, trends and automation are intentionally not enabled yet.
         </p>
 
         <dl class="foundation-status" aria-label="Foundation status">
@@ -43,6 +43,10 @@
             <dt>Runtime</dt>
             <dd id="runtime-status">Loading…</dd>
           </div>
+          <div>
+            <dt>Local AI</dt>
+            <dd id="ai-status">Checking…</dd>
+          </div>
         </dl>
 
         <p id="boot-error" class="boot-error" role="alert" hidden></p>
@@ -50,7 +54,7 @@
     </main>
 
     <footer class="app-footer">
-      <p>Local-first foundation · No telemetry · No social network calls</p>
+      <p>Local-first foundation · No telemetry · Local AI only · No social network calls</p>
     </footer>
   </body>
 </html>
