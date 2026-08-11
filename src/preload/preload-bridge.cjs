@@ -20,15 +20,20 @@ const STORAGE_IPC_CHANNELS = Object.freeze({
   projectList: 'swayforge:storage:project:list',
   projectArchive: 'swayforge:storage:project:archive'
 });
+const SECRET_IPC_CHANNELS = Object.freeze({
+  status: 'swayforge:secret-storage:status'
+});
 const HEALTH_REQUEST = Object.freeze({ kind: 'renderer-health-check', version: 1 });
 const AI_STATUS_REQUEST = Object.freeze({ kind: 'ai-runtime-status', version: 1 });
 const AI_REFRESH_REQUEST = Object.freeze({ kind: 'ai-runtime-refresh', version: 1 });
+const SECRET_STATUS_REQUEST = Object.freeze({ kind: 'secret-storage-status', version: 1 });
 
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
   healthCheck: () => ipcRenderer.invoke(IPC_CHANNELS.healthCheck, HEALTH_REQUEST),
   getAiRuntimeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.aiRuntimeStatus, AI_STATUS_REQUEST),
   refreshAiRuntimeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.aiRuntimeRefresh, AI_REFRESH_REQUEST),
+  getSecretStorageStatus: () => ipcRenderer.invoke(SECRET_IPC_CHANNELS.status, SECRET_STATUS_REQUEST),
   getApplicationState: () => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.applicationStateRead),
   updateApplicationState: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.applicationStateUpdate, request),
   createProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectCreate, request),

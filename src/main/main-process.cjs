@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { app, BrowserWindow, dialog, ipcMain, session } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, session } = require('electron');
 const {
   IPC_CHANNELS,
   createApplicationInfo,
@@ -25,6 +25,11 @@ const {
   StorageCorruptionError
 } = require('../storage/local-data-repository.cjs');
 const {
+  SECRET_IPC_CHANNELS,
+  isSecretStorageStatusRequest
+} = require('../security/secret-contracts.cjs');
+const { ProtectedSecretStore } = require('../security/protected-secret-store.cjs');
+const {
   WINDOW_WEB_PREFERENCES,
   installNavigationGuards
 } = require('../security/electron-window-policy.cjs');
@@ -33,11 +38,13 @@ const RENDERER_DIRECTORY = path.join(__dirname, '..', 'renderer');
 const RENDERER_ENTRY = path.join(RENDERER_DIRECTORY, 'index.html');
 const FALLBACK_ENTRY = path.join(RENDERER_DIRECTORY, 'fallback.html');
 const DATA_DIRECTORY_NAME = 'data';
+const CREDENTIAL_DIRECTORY_NAME = 'credentials';
 
 let primaryWindow = null;
 let handlersRegistered = false;
 let permissionsLockedDown = false;
 let localDataRepository = null;
+let protectedSecretStore = null;
 let aiRuntime = null;
 
 function getAiRuntime() {
@@ -48,6 +55,11 @@ function getAiRuntime() {
     });
   }
   return aiRuntime;
+}
+
+function getProtectedSecretStore() {
+  if (!protectedSecretStore) throw new Error('Protected credential storage is not initialised.');
+  return protectedSecretStore;
 }
 
 function sanitiseStorageError(error) {
@@ -79,9 +91,10 @@ async function storageResult(operation) {
   }
 }
 
-function registerIpcHandlers(repository = localDataRepository) {
+function registerIpcHandlers(repository = localDataRepository, secretStore = protectedSecretStore) {
   if (handlersRegistered) return;
   if (!repository) throw new Error('Local data repository must be ready before IPC registration.');
+  if (!secretStore) throw new Error('Protected credential storage must be initialised before IPC registration.');
   handlersRegistered = true;
 
   ipcMain.handle(IPC_CHANNELS.applicationInfo, () =>
@@ -108,6 +121,11 @@ function registerIpcHandlers(repository = localDataRepository) {
   ipcMain.handle(IPC_CHANNELS.aiRuntimeRefresh, (_event, request) => {
     if (!isAiRefreshRequest(request)) throw new TypeError('Invalid AI refresh request.');
     return getAiRuntime().getStatus({ refresh: true });
+  });
+
+  ipcMain.handle(SECRET_IPC_CHANNELS.status, (_event, request) => {
+    if (!isSecretStorageStatusRequest(request)) throw new TypeError('Invalid secret-storage status request.');
+    return secretStore.getStatus();
   });
 
   ipcMain.handle(STORAGE_IPC_CHANNELS.applicationStateRead, () =>
@@ -139,6 +157,16 @@ async function initialiseLocalDataRepository() {
     rootDirectory: path.join(app.getPath('userData'), DATA_DIRECTORY_NAME)
   });
   return localDataRepository;
+}
+
+async function initialiseProtectedSecretStore() {
+  if (protectedSecretStore) return protectedSecretStore;
+  protectedSecretStore = await ProtectedSecretStore.open({
+    rootDirectory: path.join(app.getPath('userData'), CREDENTIAL_DIRECTORY_NAME),
+    applicationRootDirectory: app.getAppPath(),
+    safeStorage
+  });
+  return protectedSecretStore;
 }
 
 function lockDownRendererPermissions() {
@@ -203,6 +231,7 @@ function createPrimaryWindow() {
 
 async function startApplication() {
   await initialiseLocalDataRepository();
+  await initialiseProtectedSecretStore();
   registerIpcHandlers();
   lockDownRendererPermissions();
   createPrimaryWindow();
@@ -237,7 +266,9 @@ app.on('window-all-closed', () => {
 module.exports = {
   createPrimaryWindow,
   getAiRuntime,
+  getProtectedSecretStore,
   initialiseLocalDataRepository,
+  initialiseProtectedSecretStore,
   lockDownRendererPermissions,
   registerIpcHandlers,
   sanitiseStorageError,
