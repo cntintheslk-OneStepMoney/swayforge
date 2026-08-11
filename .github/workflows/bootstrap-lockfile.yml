@@ -1,0 +1,31 @@
+name: Bootstrap dependency lockfile
+
+on:
+  push:
+    branches:
+      - maintenance/quality-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    name: Generate npm lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.12.0
+          package-manager-cache: false
+      - name: Generate package-lock.json
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: swayforge-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
