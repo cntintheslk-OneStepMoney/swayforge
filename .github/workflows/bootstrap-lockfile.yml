@@ -1,6 +1,9 @@
 name: Bootstrap dependency lockfile
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - maintenance/quality-foundation
