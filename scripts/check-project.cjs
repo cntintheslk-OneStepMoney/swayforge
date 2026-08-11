@@ -13,7 +13,10 @@ const REQUIRED_FILES = Object.freeze([
   'src/renderer/styles.css',
   'src/renderer/fallback.css',
   'src/core/application-contracts.cjs',
-  'src/security/electron-window-policy.cjs'
+  'src/security/electron-window-policy.cjs',
+  'src/storage/storage-contracts.cjs',
+  'src/storage/migrations.cjs',
+  'src/storage/local-data-repository.cjs'
 ]);
 
 const FORBIDDEN_BASENAMES = new Set([
@@ -21,7 +24,9 @@ const FORBIDDEN_BASENAMES = new Set([
   'credentials.json',
   'tokens.json',
   'oauth-response.json',
-  'cookies.json'
+  'cookies.json',
+  'workspace.json',
+  'workspace.previous.json'
 ]);
 
 const FORBIDDEN_EXTENSIONS = new Set([
