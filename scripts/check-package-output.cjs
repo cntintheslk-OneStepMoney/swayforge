@@ -9,20 +9,24 @@ const DIST_DIRECTORY = path.join(ROOT, 'dist');
 const UNPACKED_DIRECTORY = path.join(DIST_DIRECTORY, 'win-unpacked');
 const RESOURCES_DIRECTORY = path.join(UNPACKED_DIRECTORY, 'resources');
 const ASAR_PATH = path.join(RESOURCES_DIRECTORY, 'app.asar');
+const ASAR_CLI_PATH = path.join(ROOT, 'node_modules', '@electron', 'asar', 'bin', 'asar.mjs');
 
 function normaliseArchivePath(value) {
   return value.replace(/\\/g, '/').replace(/^\/+/, '').trim();
 }
 
 function listAsar(archivePath) {
-  const executable = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const result = spawnSync(executable, ['--no-install', 'asar', 'list', archivePath], {
+  if (!fs.existsSync(ASAR_CLI_PATH)) {
+    throw new Error(`Unable to inspect app.asar: pinned @electron/asar CLI is missing at ${ASAR_CLI_PATH}`);
+  }
+  const result = spawnSync(process.execPath, [ASAR_CLI_PATH, 'list', archivePath], {
     cwd: ROOT,
     encoding: 'utf8',
     windowsHide: true
   });
   if (result.status !== 0) {
-    throw new Error(`Unable to inspect app.asar: ${(result.stderr || result.stdout || 'asar command failed').trim()}`);
+    const detail = result.error?.message || result.stderr || result.stdout || 'asar command failed';
+    throw new Error(`Unable to inspect app.asar: ${String(detail).trim()}`);
   }
   return result.stdout.split(/\r?\n/).map(normaliseArchivePath).filter(Boolean);
 }
@@ -128,6 +132,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  ASAR_CLI_PATH,
   ASAR_PATH,
   DIST_DIRECTORY,
   RESOURCES_DIRECTORY,
