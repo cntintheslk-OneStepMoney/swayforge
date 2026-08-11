@@ -10,11 +10,13 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const packageJson = JSON.parse(read('package.json'));
 const packageLock = JSON.parse(read('package-lock.json'));
 
- test('release metadata has one authoritative v0.1.0 application version', () => {
+test('release metadata has one authoritative v0.1.0 application version', () => {
   assert.equal(packageJson.name, 'swayforge');
   assert.equal(packageJson.productName, 'SwayForge');
   assert.equal(packageJson.version, '0.1.0');
   assert.equal(packageLock.packages[''].name, packageJson.name);
+  assert.equal(packageLock.version, packageJson.version);
+  assert.equal(packageLock.packages[''].version, packageJson.version);
 
   const builder = read('build/electron-builder.config.cjs');
   assert.match(builder, /artifactName:\s*'\$\{productName\}-\$\{version\}-win-\$\{arch\}\.\$\{ext\}'/);
