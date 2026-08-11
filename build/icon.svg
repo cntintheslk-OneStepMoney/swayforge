@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Original SwayForge development icon created for this repository. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">SwayForge</title>
+  <desc id="desc">A stylised signal sweeping into a forged S mark.</desc>
+  <defs>
+    <linearGradient id="forge" x1="96" y1="64" x2="420" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="0.52" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="#111827"/>
+  <path d="M118 164c45-48 103-72 173-72 43 0 83 9 121 27" fill="none" stroke="url(#forge)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M102 225c44-36 96-54 157-54 46 0 89 11 128 32" fill="none" stroke="url(#forge)" stroke-width="28" stroke-linecap="round" opacity="0.78"/>
+  <path d="M365 180c-25-21-61-33-105-33-55 0-91 21-91 55 0 30 27 43 92 55 92 17 133 51 133 111 0 73-63 118-157 118-61 0-116-17-157-50l38-60c34 27 76 42 121 42 52 0 82-17 82-47 0-28-25-41-89-54-94-19-136-51-136-111 0-72 64-119 163-119 58 0 107 15 144 43z" fill="url(#forge)"/>
+  <path d="M330 356h94l-35 33 35 33h-94z" fill="#f8fafc" opacity="0.92"/>
+</svg>
