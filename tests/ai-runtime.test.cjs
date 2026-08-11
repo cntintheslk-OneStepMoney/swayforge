@@ -319,7 +319,7 @@ test('renderer receives typed status only and no generic HTTP or generation brid
 
 test('application startup does not wait for Ollama and shutdown cancels AI work', () => {
   const mainSource = read('src/main/main-process.cjs');
-  assert.match(mainSource, /createPrimaryWindow\(\);\n  void getAiRuntime\(\)\.getStatus/);
+  assert.match(mainSource, /createPrimaryWindow\(\);\r?\n  void getAiRuntime\(\)\.getStatus/);
   assert.match(mainSource, /app\.on\('before-quit'/);
   assert.match(mainSource, /aiRuntime\?\.shutdown\(\)/);
   assert.doesNotMatch(mainSource, /await getAiRuntime\(\)\.getStatus/);
