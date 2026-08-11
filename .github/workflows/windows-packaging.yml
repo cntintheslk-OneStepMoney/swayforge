@@ -45,7 +45,16 @@ jobs:
         run: npm run lint
 
       - name: Build unpacked Windows x64 application
-        run: npm run pack:win
+        shell: pwsh
+        run: |
+          npm run pack:win 2>&1 | Tee-Object -Variable buildOutput
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            $tail = (($buildOutput | Select-Object -Last 16) -join "`n").Trim()
+            $tail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error file=package.json,title=Windows unpacked package build failed::$tail"
+            exit $buildExit
+          }
 
       - name: Inspect unpacked package contents
         run: npm run check:package-output
@@ -55,7 +64,16 @@ jobs:
         run: ./scripts/smoke-packaged-windows.ps1
 
       - name: Build Windows x64 NSIS installer
-        run: npm run dist:win
+        shell: pwsh
+        run: |
+          npm run dist:win 2>&1 | Tee-Object -Variable buildOutput
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            $tail = (($buildOutput | Select-Object -Last 16) -join "`n").Trim()
+            $tail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error file=package.json,title=Windows NSIS package build failed::$tail"
+            exit $buildExit
+          }
 
       - name: Re-inspect packaged output and installer naming
         run: npm run check:package-output
