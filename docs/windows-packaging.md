@@ -104,7 +104,7 @@ The accepted runtime already roots authoritative mutable state beneath Electron'
 
 The installed `resources` directory and `app.asar` are application code/assets only. They are not mutable application storage.
 
-The Windows packaging CI smoke temporarily redirects the runner's `%APPDATA%` root, launches the packaged application, verifies that `data/workspace.json` appears under `%APPDATA%/SwayForge`, restarts the packaged app, and rejects any `workspace.json` written under `dist/win-unpacked`.
+The Windows packaging CI smoke uses the hosted runner's real per-user `%APPDATA%` location, launches the packaged application, finds the single app-level `data/workspace.json` created there, restarts the packaged app and requires it to reuse the same workspace. It also rejects any `workspace.json` written under `dist/win-unpacked`. Because each GitHub-hosted Windows job receives an ephemeral runner profile, this validates the normal Windows path without adding a production-only storage override.
 
 ## Installer verification
 
@@ -116,13 +116,13 @@ The Windows packaging workflow performs these steps before any artifact is uploa
 4. Lint/static checks.
 5. `npm run pack:win`.
 6. ASAR/output privacy inspection.
-7. Unpacked application launch and restart smoke.
+7. Unpacked application launch and restart smoke using the same per-user workspace.
 8. `npm run dist:win`.
 9. Repeat package/output inspection.
 10. Silent NSIS install to an isolated runner directory.
 11. Launch the installed application.
 12. Silent uninstall.
-13. Verify the isolated SwayForge user-data workspace still exists after uninstall.
+13. Verify the same per-user SwayForge workspace still exists after uninstall.
 14. Generate a SHA-256 artifact manifest.
 15. Upload the already-verified installer and manifest as a short-retention workflow artifact.
 
