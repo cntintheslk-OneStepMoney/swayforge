@@ -4,6 +4,12 @@
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.SwayForgeNavigation = api;
+  if (root?.document) {
+    const script = root.document.createElement('script');
+    script.src = './settings-page.js';
+    script.defer = true;
+    root.document.head.append(script);
+  }
 })(typeof globalThis === 'object' ? globalThis : this, () => {
   const ROUTES = Object.freeze([
     Object.freeze({ key: 'home', label: 'Home', enabled: true, heading: 'Home', context: 'Your local SwayForge workspace at a glance.' }),
@@ -12,7 +18,7 @@
     Object.freeze({ key: 'create', label: 'Create', enabled: false, heading: 'Create', context: 'Content Studio arrives in a later release.' }),
     Object.freeze({ key: 'trends', label: 'Trends', enabled: false, heading: 'Trends', context: 'Trend Intelligence is planned for v0.5.0.' }),
     Object.freeze({ key: 'publishing', label: 'Publishing', enabled: false, heading: 'Publishing', context: 'Social publishing is planned for v0.4.0.' }),
-    Object.freeze({ key: 'settings', label: 'Settings', enabled: true, heading: 'Settings', context: 'Local configuration and diagnostics will be completed in the settings workstream.' })
+    Object.freeze({ key: 'settings', label: 'Settings', enabled: true, heading: 'Settings', context: 'Configure local appearance, Ollama, storage information and privacy-safe diagnostics.' })
   ]);
 
   const ROUTE_BY_KEY = new Map(ROUTES.map((route) => [route.key, route]));
