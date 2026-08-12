@@ -1,7 +1,7 @@
 {
   "name": "swayforge",
   "productName": "SwayForge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Local-first social content workspace foundation.",
   "main": "src/main/application-bootstrap.cjs",
@@ -19,6 +19,7 @@
     "check:git": "node scripts/check-git-conventions.mjs",
     "lint": "node scripts/lint-project.cjs",
     "smoke:electron": "node scripts/electron-smoke.cjs",
+    "sync:project": "node scripts/project-board-sync.cjs",
     "pack:win": "electron-builder --config build/electron-builder.config.cjs --win --x64 --dir --publish never",
     "dist:win": "electron-builder --config build/electron-builder.config.cjs --win nsis --x64 --publish never"
   },
