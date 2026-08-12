@@ -8,7 +8,15 @@ const {
   MEDIA_PREVIEW_REQUEST_KIND,
   validateMediaPreviewRequest
 } = require('../media/media-contracts.cjs');
+const {
+  MEDIA_INDEX_IPC_CHANNELS,
+  MEDIA_INDEX_REBUILD_REQUEST,
+  MEDIA_INDEX_STATUS_REQUEST,
+  isExactRequest: isExactMediaIndexRequest,
+  validateMediaIndexSearchRequest
+} = require('../media/media-index-contracts.cjs');
 const { MediaPreviewService } = require('../media/media-preview-service.cjs');
+const { MediaIndexService } = require('../media/media-index-service.cjs');
 const { createElectronPreviewGenerators } = require('../media/electron-preview-generators.cjs');
 const {
   installMediaPreviewProtocol,
@@ -18,6 +26,7 @@ const {
 const CACHE_DIRECTORY_NAME = 'cache';
 const MEDIA_DIRECTORY_NAME = 'media';
 const MEDIA_PREVIEW_DIRECTORY_NAME = 'media-previews';
+const MEDIA_INDEX_DIRECTORY_NAME = 'media-index';
 const MEDIA_PREVIEW_GENERATOR_VERSION = 'electron-native-preview-v1';
 
 registerMediaPreviewScheme(protocol);
@@ -25,6 +34,8 @@ const foundation = require('./main-process.cjs');
 
 let mediaPreviewService = null;
 let mediaPreviewServicePromise = null;
+let mediaIndexService = null;
+let mediaIndexServicePromise = null;
 let previewProtocolInstalled = false;
 
 function sanitisePreviewError(error) {
@@ -47,11 +58,29 @@ function sanitisePreviewError(error) {
   return Object.freeze({ code, message: messages[code] ?? 'The local media preview could not be generated safely.' });
 }
 
+function sanitiseIndexError(error) {
+  const code = error instanceof TypeError ? 'INVALID_REQUEST' : typeof error?.code === 'string' ? error.code : 'MEDIA_INDEX_ERROR';
+  return Object.freeze({
+    code,
+    message: code === 'INVALID_REQUEST'
+      ? 'The media search request was invalid.'
+      : 'The local media search index could not be used safely. Authoritative media data was preserved.'
+  });
+}
+
 async function previewResult(operation) {
   try {
     return Object.freeze({ ok: true, value: await operation() });
   } catch (error) {
     return Object.freeze({ ok: false, error: sanitisePreviewError(error) });
+  }
+}
+
+async function indexResult(operation) {
+  try {
+    return Object.freeze({ ok: true, value: await operation() });
+  } catch (error) {
+    return Object.freeze({ ok: false, error: sanitiseIndexError(error) });
   }
 }
 
@@ -77,6 +106,25 @@ async function getMediaPreviewService() {
   return mediaPreviewServicePromise;
 }
 
+async function getMediaIndexService() {
+  if (mediaIndexService) return mediaIndexService;
+  if (!mediaIndexServicePromise) {
+    mediaIndexServicePromise = (async () => {
+      const repository = await foundation.initialiseLocalDataRepository();
+      const service = await MediaIndexService.open({
+        rootDirectory: path.join(app.getPath('userData'), CACHE_DIRECTORY_NAME, MEDIA_INDEX_DIRECTORY_NAME),
+        repository
+      });
+      mediaIndexService = service;
+      return service;
+    })().catch((error) => {
+      mediaIndexServicePromise = null;
+      throw error;
+    });
+  }
+  return mediaIndexServicePromise;
+}
+
 function registerPreviewIpcHandlers() {
   ipcMain.handle(MEDIA_IPC_CHANNELS.preview, (_event, request) =>
     previewResult(async () => {
@@ -88,6 +136,26 @@ function registerPreviewIpcHandlers() {
     previewResult(async () => {
       const validated = validateMediaPreviewRequest(request, MEDIA_PREVIEW_REBUILD_REQUEST_KIND);
       return (await getMediaPreviewService()).requestPreview(validated.mediaId, { force: true });
+    })
+  );
+}
+
+function registerMediaIndexIpcHandlers() {
+  ipcMain.handle(MEDIA_INDEX_IPC_CHANNELS.search, (_event, request) =>
+    indexResult(async () => (await getMediaIndexService()).search(validateMediaIndexSearchRequest(request)))
+  );
+  ipcMain.handle(MEDIA_INDEX_IPC_CHANNELS.status, (_event, request) =>
+    indexResult(async () => {
+      if (!isExactMediaIndexRequest(request, MEDIA_INDEX_STATUS_REQUEST)) throw new TypeError('Invalid media index status request.');
+      const service = await getMediaIndexService();
+      await service.refreshIfStale();
+      return service.getStatus();
+    })
+  );
+  ipcMain.handle(MEDIA_INDEX_IPC_CHANNELS.rebuild, (_event, request) =>
+    indexResult(async () => {
+      if (!isExactMediaIndexRequest(request, MEDIA_INDEX_REBUILD_REQUEST)) throw new TypeError('Invalid media index rebuild request.');
+      return (await getMediaIndexService()).rebuild('explicit-request');
     })
   );
 }
@@ -104,8 +172,12 @@ async function installPreviewProtocol() {
 }
 
 registerPreviewIpcHandlers();
+registerMediaIndexIpcHandlers();
 app.whenReady().then(installPreviewProtocol).catch(() => {
   // The foundation app remains usable if the rebuildable preview cache cannot start.
+});
+app.whenReady().then(() => getMediaIndexService()).catch(() => {
+  // Search remains safely unavailable; authoritative media/project data is untouched.
 });
 
 app.on('before-quit', () => {
@@ -114,9 +186,13 @@ app.on('before-quit', () => {
 
 module.exports = {
   MEDIA_PREVIEW_GENERATOR_VERSION,
+  getMediaIndexService,
   getMediaPreviewService,
+  indexResult,
   installPreviewProtocol,
   previewResult,
+  registerMediaIndexIpcHandlers,
   registerPreviewIpcHandlers,
+  sanitiseIndexError,
   sanitisePreviewError
 };
