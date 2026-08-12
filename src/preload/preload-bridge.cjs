@@ -41,6 +41,11 @@ const MEDIA_AI_IPC_CHANNELS = Object.freeze({
   analyze: 'swayforge:media:ai:analyze',
   get: 'swayforge:media:ai:get'
 });
+const MEDIA_ORGANISATION_IPC_CHANNELS = Object.freeze({
+  snapshot: 'swayforge:media:organisation:snapshot',
+  mutate: 'swayforge:media:organisation:mutate',
+  aiSuggestions: 'swayforge:media:organisation:ai-suggestions'
+});
 const SETTINGS_IPC_CHANNELS = Object.freeze({
   read: 'swayforge:settings:read',
   update: 'swayforge:settings:update',
@@ -63,6 +68,7 @@ const MEDIA_INDEX_STATUS_REQUEST = Object.freeze({ kind: 'media-index-status', v
 const MEDIA_INDEX_REBUILD_REQUEST = Object.freeze({ kind: 'media-index-rebuild', version: 1 });
 const MEDIA_SIMILARITY_STATUS_REQUEST = Object.freeze({ kind: 'media-similarity-status', version: 1 });
 const MEDIA_SIMILARITY_REBUILD_REQUEST = Object.freeze({ kind: 'media-similarity-rebuild', version: 1 });
+const MEDIA_ORGANISATION_SNAPSHOT_REQUEST = Object.freeze({ kind: 'media-organisation-snapshot', version: 1 });
 const SETTINGS_READ_REQUEST = Object.freeze({ kind: 'settings-read', version: 1 });
 const SETTINGS_AI_MODELS_REQUEST = Object.freeze({ kind: 'settings-ai-models', version: 1 });
 const SETTINGS_STORAGE_INFO_REQUEST = Object.freeze({ kind: 'settings-storage-info', version: 1 });
@@ -96,6 +102,14 @@ function mediaAiRequest(kind, mediaId) {
   return Object.freeze({ kind, version: 1, mediaId });
 }
 
+function organisationMutation(action, fields = {}) {
+  return Object.freeze({ ...fields, kind: 'media-organisation-mutation', version: 1, action });
+}
+
+function aiSuggestionsRequest(mediaId) {
+  return Object.freeze({ kind: 'media-organisation-ai-suggestions', version: 1, mediaId });
+}
+
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
   healthCheck: () => ipcRenderer.invoke(IPC_CHANNELS.healthCheck, HEALTH_REQUEST),
@@ -125,6 +139,23 @@ const bridge = Object.freeze({
   rebuildMediaSimilarity: () => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.rebuild, MEDIA_SIMILARITY_REBUILD_REQUEST),
   analyzeMediaLocally: (mediaId) => ipcRenderer.invoke(MEDIA_AI_IPC_CHANNELS.analyze, mediaAiRequest('media-ai-analyze', mediaId)),
   getMediaAiAnalysis: (mediaId) => ipcRenderer.invoke(MEDIA_AI_IPC_CHANNELS.get, mediaAiRequest('media-ai-get', mediaId)),
+  getMediaOrganisation() { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.snapshot, MEDIA_ORGANISATION_SNAPSHOT_REQUEST); },
+  createMediaTag: (name) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('tag-create', { name })),
+  renameMediaTag: (tagId, name) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('tag-rename', { tagId, name })),
+  deleteMediaTag: (tagId) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('ag-delete', { tagId })),
+  assignMediaTags: (tagIds, mediaIds) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('ag-assign', { tagIds, mediaIds })),
+  removeMediaTags: (tagIds, mediaIds) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('tag-remove', { tagIds, mediaIds })),
+  createMediaCollection(name) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('collection-create', { name })); },
+  renameMediaCollection(collectionId, name) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('collection-rename', { collectionId, name })); },
+  archiveMediaCollection(collectionId) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('collection-archive', { collectionId })); },
+  deleteMediaCollection(collectionId) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('collection-delete', { collectionId })); },
+  addMediaToCollection(collectionId, mediaIds) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANELS.mutate, organisationMutation('collection-add-media', { collectionId, mediaIds })); },
+  removeMediaFromCollection(collectionId, mediaIds) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('collection-remove-media', { collectionId, mediaIds })); },
+  saveMediaView: (name, criteria) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('saved-view-save', { name, criteria })),
+  deleteMediaView: (savedViewId) => ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANELS.mutate, organisationMutation('saved-view-delete', { savedViewId })),
+  getMediaAiSuggestions(mediaId) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.aiSuggestions, aiSuggestionsRequest(mediaId)); },
+  acceptMediaAiSuggestion(mediaId, label) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('ai-suggestion-accept', { mediaId, label })); },
+  dismissMediaAiSuggestion(mediaId, label) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('ai-suggestion-dismiss', { mediaId, label })); },
   getSettings: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.read, SETTINGS_READ_REQUEST),
   updateSettings: (request) => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.update, request),
   listAiModels: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.aiModels, SETTINGS_AI_MODELS_REQUEST),
