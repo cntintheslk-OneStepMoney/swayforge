@@ -1,0 +1,18 @@
+{
+  "projectOwner": "cntintheslk-OneStepMoney",
+  "projectOwnerType": "user",
+  "projectNumber": 1,
+  "statusField": "Status",
+  "fieldNames": {
+    "priority": "Priority",
+    "complexity": "Complexity",
+    "title": "Title",
+    "status": "Status",
+    "type": "Type",
+    "targetRelease": "Target Release",
+    "area": "Area",
+    "branch": "Branch",
+    "startDate": "Start Date",
+    "targetDate": "Target Date"
+  }
+}
