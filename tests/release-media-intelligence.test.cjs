@@ -47,7 +47,8 @@ test('exact identity, perceptual similarity and user organisation remain separat
   assert.match(similarity, /createHash\(['"]sha256['"]\)/);
 
   const organisation = read('src/media/media-organisation-service.cjs');
-  assert.match(organisation, /mediaOrganisation/);
+  assert.match(organisation, /repository\.readMediaOrganisation/);
+  assert.match(organisation, /repository\.replaceMediaOrganisation/);
   assert.doesNotMatch(organisation, /unlinkSync|rmSync|deleteFile|removeManaged/i);
 
   const integrity = read('src/media/media-integrity-service.cjs');
@@ -58,11 +59,12 @@ test('exact identity, perceptual similarity and user organisation remain separat
 test('release retains explicit bounded-scale evidence for low-thousands media libraries', () => {
   const indexTests = read('tests/media-index.test.cjs');
   const similarityTests = `${read('tests/media-similarity.test.cjs')}\n${read('tests/media-similarity-integration.test.cjs')}`;
-  const library = read('src/renderer/media-library.js');
+  const libraryModel = read('src/renderer/media-library-model.js');
 
   assert.match(indexTests, /5[,_]?000/);
   assert.match(similarityTests, /5[,_]?000/);
-  assert.match(library, /60/);
+  assert.match(libraryModel, /DEFAULT_RENDER_LIMIT\s*=\s*60/);
+  assert.match(libraryModel, /MAX_RENDER_LIMIT\s*=\s*6000/);
 });
 
 test('release documentation preserves local-first and rebuildable-derived semantics', () => {
