@@ -37,6 +37,10 @@ const MEDIA_SIMILARITY_IPC_CHANNELS = Object.freeze({
   status: 'swayforge:media:similarity:status',
   rebuild: 'swayforge:media:similarity:rebuild'
 });
+const MEDIA_AI_IPC_CHANNELS = Object.freeze({
+  analyze: 'swayforge:media:ai:analyze',
+  get: 'swayforge:media:ai:get'
+});
 const SETTINGS_IPC_CHANNELS = Object.freeze({
   read: 'swayforge:settings:read',
   update: 'swayforge:settings:update',
@@ -88,6 +92,10 @@ function mediaSimilarityFindRequest(mediaId, options) {
   return Object.freeze({ ...fields, kind: 'media-similarity-find', version: 1, mediaId });
 }
 
+function mediaAiRequest(kind, mediaId) {
+  return Object.freeze({ kind, version: 1, mediaId });
+}
+
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
   healthCheck: () => ipcRenderer.invoke(IPC_CHANNELS.healthCheck, HEALTH_REQUEST),
@@ -115,6 +123,8 @@ const bridge = Object.freeze({
   findSimilarMedia: (mediaId, options = {}) => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.find, mediaSimilarityFindRequest(mediaId, options)),
   getMediaSimilarityStatus: () => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.status, MEDIA_SIMILARITY_STATUS_REQUEST),
   rebuildMediaSimilarity: () => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.rebuild, MEDIA_SIMILARITY_REBUILD_REQUEST),
+  analyzeMediaLocally: (mediaId) => ipcRenderer.invoke(MEDIA_AI_IPC_CHANNELS.analyze, mediaAiRequest('media-ai-analyze', mediaId)),
+  getMediaAiAnalysis: (mediaId) => ipcRenderer.invoke(MEDIA_AI_IPC_CHANNELS.get, mediaAiRequest('media-ai-get', mediaId)),
   getSettings: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.read, SETTINGS_READ_REQUEST),
   updateSettings: (request) => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.update, request),
   listAiModels: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.aiModels, SETTINGS_AI_MODELS_REQUEST),

@@ -25,7 +25,7 @@
   async function loadVideo(sourceUrl) {
     if (typeof sourceUrl !== 'string' || !sourceUrl.startsWith('file:')) throw new TypeError('sourceUrl must be a local file URL.');
     const video = document.createElement('video');
-    video.preload = 'auto';
+    video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
     video.src = sourceUrl;
@@ -41,6 +41,12 @@
     } else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       await waitFor(video, 'loadeddata');
     }
+  }
+
+  function sampleTime(video, fraction) {
+    const durationSeconds = Number.isFinite(video.duration) ? video.duration : null;
+    if (!durationSeconds || durationSeconds <= 0.1) return 0;
+    return Math.min(Math.max(durationSeconds * fraction, 0.05), Math.max(0.05, durationSeconds - 0.05));
   }
 
   function currentFrameDHash(video) {
@@ -66,6 +72,27 @@
     return BigInt(`0b${bits}`).toString(16).padStart(16, '0');
   }
 
+  function currentFramePng(video, maxDimension) {
+    const target = fitWithin(video.videoWidth, video.videoHeight, maxDimension);
+    const canvas = document.createElement('canvas');
+    canvas.width = target.width;
+    canvas.height = target.height;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) throw new Error('Video analysis canvas is unavailable.');
+    context.drawImage(video, 0, 0, target.width, target.height);
+    const dataUrl = canvas.toDataURL('image/png');
+    return {
+      pngBase64: dataUrl.slice(dataUrl.indexOf(',') + 1),
+      width: target.width,
+      height: target.height
+    };
+  }
+
+  function releaseVideo(video) {
+    video.removeAttribute('src');
+    video.load();
+  }
+
   root.swayForgeExtractVideoPoster = async function swayForgeExtractVideoPoster({ sourceUrl, maxDimension }) {
     if (!Number.isSafeInteger(maxDimension) || maxDimension < 64 || maxDimension > 2048) throw new TypeError('maxDimension is invalid.');
     const video = await loadVideo(sourceUrl);
@@ -74,23 +101,9 @@
       ? Math.min(Math.max(durationSeconds * 0.1, 0.1), Math.max(0.1, durationSeconds - 0.1))
       : 0;
     await seekVideo(video, seekTarget);
-
-    const target = fitWithin(video.videoWidth, video.videoHeight, maxDimension);
-    const canvas = document.createElement('canvas');
-    canvas.width = target.width;
-    canvas.height = target.height;
-    const context = canvas.getContext('2d', { alpha: false });
-    if (!context) throw new Error('Video preview canvas is unavailable.');
-    context.drawImage(video, 0, 0, target.width, target.height);
-    const dataUrl = canvas.toDataURL('image/png');
-    video.removeAttribute('src');
-    video.load();
-    return {
-      pngBase64: dataUrl.slice(dataUrl.indexOf(',') + 1),
-      width: target.width,
-      height: target.height,
-      durationSeconds
-    };
+    const frame = currentFramePng(video, maxDimension);
+    releaseVideo(video);
+    return { ...frame, durationSeconds };
   };
 
   root.swayForgeExtractVideoPerceptualHashes = async function swayForgeExtractVideoPerceptualHashes({ sourceUrl, sampleFractions }) {
@@ -104,14 +117,10 @@
     const sourceHeight = video.videoHeight;
     const hashes = [];
     for (const fraction of sampleFractions) {
-      const target = durationSeconds && durationSeconds > 0.1
-        ? Math.min(Math.max(durationSeconds * fraction, 0.05), Math.max(0.05, durationSeconds - 0.05))
-        : 0;
-      await seekVideo(video, target);
+      await seekVideo(video, sampleTime(video, fraction));
       hashes.push(currentFrameDHash(video));
     }
-    video.removeAttribute('src');
-    video.load();
+    releaseVideo(video);
     return {
       hashes,
       width: sourceWidth,
@@ -119,5 +128,22 @@
       durationSeconds,
       sampleFractions: [...sampleFractions]
     };
+  };
+
+  root.swayForgeExtractVideoAnalysisFrames = async function swayForgeExtractVideoAnalysisFrames({ sourceUrl, sampleFractions, maxDimension }) {
+    if (!Array.isArray(sampleFractions) || sampleFractions.length < 1 || sampleFractions.length > 4
+      || sampleFractions.some((value) => !Number.isFinite(value) || value < 0 || value > 1)) {
+      throw new TypeError('sampleFractions are invalid.');
+    }
+    if (!Number.isSafeInteger(maxDimension) || maxDimension < 64 || maxDimension > 1024) throw new TypeError('maxDimension is invalid.');
+    const video = await loadVideo(sourceUrl);
+    const durationSeconds = Number.isFinite(video.duration) ? video.duration : null;
+    const frames = [];
+    for (const fraction of sampleFractions) {
+      await seekVideo(video, sampleTime(video, fraction));
+      frames.push({ fraction, ...currentFramePng(video, maxDimension) });
+    }
+    releaseVideo(video);
+    return { durationSeconds, frames };
   };
 })(globalThis);

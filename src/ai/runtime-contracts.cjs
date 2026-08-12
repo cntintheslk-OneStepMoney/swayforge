@@ -27,6 +27,9 @@ const LIMITS = Object.freeze({
   maxMessages: 32,
   maxInputCharacters: 64_000,
   maxMessageCharacters: 16_000,
+  maxImagesPerMessage: 4,
+  maxImageBytes: 2 * 1024 * 1024,
+  maxTotalImageBytes: 6 * 1024 * 1024,
   maxModelIdentifierCharacters: 160,
   maxOutputCharacters: 64_000,
   maxOutputTokens: 8_192,
@@ -36,6 +39,7 @@ const LIMITS = Object.freeze({
 });
 
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant']);
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 
 function isBoundedString(value, maxLength) {
   return typeof value === 'string' && value.length > 0 && value.length <= maxLength;
@@ -83,6 +87,17 @@ function validateModelIdentifier(value) {
   return value;
 }
 
+function normaliseImagePayload(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.length % 4 !== 0 || !BASE64_PATTERN.test(value)) {
+    throw new TypeError('Invalid AI image payload.');
+  }
+  const decodedBytes = Buffer.byteLength(Buffer.from(value, 'base64'));
+  if (decodedBytes < 1 || decodedBytes > LIMITS.maxImageBytes) {
+    throw new TypeError('AI image payload exceeds its configured bound.');
+  }
+  return Object.freeze({ value, decodedBytes });
+}
+
 function normaliseMessages(request) {
   const source = Array.isArray(request.messages)
     ? request.messages
@@ -95,20 +110,41 @@ function normaliseMessages(request) {
   }
 
   let totalCharacters = 0;
+  let totalImageBytes = 0;
   const messages = source.map((message) => {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
       throw new TypeError('Invalid AI message.');
+    }
+    const allowedKeys = new Set(['role', 'content', 'images']);
+    if (Object.keys(message).some((key) => !allowedKeys.has(key))) {
+      throw new TypeError('Unsupported AI message option.');
     }
     if (!ALLOWED_ROLES.has(message.role)) throw new TypeError('Invalid AI message role.');
     if (!isBoundedString(message.content, LIMITS.maxMessageCharacters)) {
       throw new TypeError('Invalid AI message content.');
     }
     totalCharacters += message.content.length;
-    return Object.freeze({ role: message.role, content: message.content });
+
+    let images;
+    if (message.images !== undefined) {
+      if (message.role !== 'user' || !Array.isArray(message.images) || message.images.length < 1 || message.images.length > LIMITS.maxImagesPerMessage) {
+        throw new TypeError('AI image payloads are only permitted on bounded user messages.');
+      }
+      const normalised = message.images.map(normaliseImagePayload);
+      totalImageBytes += normalised.reduce((sum, item) => sum + item.decodedBytes, 0);
+      images = Object.freeze(normalised.map((item) => item.value));
+    }
+
+    return Object.freeze(images
+      ? { role: message.role, content: message.content, images }
+      : { role: message.role, content: message.content });
   });
 
   if (totalCharacters > LIMITS.maxInputCharacters) {
     throw new TypeError('AI request input is too large.');
+  }
+  if (totalImageBytes > LIMITS.maxTotalImageBytes) {
+    throw new TypeError('AI request image input is too large.');
   }
 
   return Object.freeze(messages);
@@ -202,10 +238,12 @@ function createSuccess({ requestId, model, content }) {
 module.exports = {
   AI_ERROR_CATEGORIES,
   AI_RUNTIME_STATES,
+  BASE64_PATTERN,
   LIMITS,
   createFailure,
   createSuccess,
   freezeStatus,
   normaliseGenerationRequest,
+  normaliseImagePayload,
   validateModelIdentifier
 };
