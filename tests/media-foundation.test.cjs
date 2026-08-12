@@ -76,7 +76,7 @@ async function setup(root, projectIds = [PROJECT_ID_A, PROJECT_ID_B], mediaIds =
   return { repository, service };
 }
 
-test('existing schema-one stores remain readable before the additive media collection exists', () => {
+test('existing schema-one stores migrate safely to the additive media organisation schema', () => {
   const source = {
     schemaVersion: 1,
     revision: 0,
@@ -87,8 +87,11 @@ test('existing schema-one stores remain readable before the additive media colle
   };
   const result = runMigrations(source);
   assert.equal(result.document.schemaVersion, CURRENT_SCHEMA_VERSION);
-  assert.deepEqual(result.applied, []);
-  assert.equal(result.document.media, undefined);
+  assert.deepEqual(result.applied, ['1->2']);
+  assert.deepEqual(result.document.media, {});
+  assert.equal(result.document.mediaOrganisation.schemaVersion, 1);
+  assert.deepEqual(result.document.mediaOrganisation.tags, {});
+  assert.deepEqual(result.document.mediaOrganisation.collections, {});
 });
 
 test('supported PNG imports as managed copy with minimal metadata', async (t) => {
