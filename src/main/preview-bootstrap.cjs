@@ -15,9 +15,18 @@ const {
   isExactRequest: isExactMediaIndexRequest,
   validateMediaIndexSearchRequest
 } = require('../media/media-index-contracts.cjs');
+const {
+  MEDIA_SIMILARITY_IPC_CHANNELS,
+  MEDIA_SIMILARITY_REBUILD_REQUEST,
+  MEDIA_SIMILARITY_STATUS_REQUEST,
+  isExactRequest: isExactSimilarityRequest,
+  validateFindSimilarityRequest
+} = require('../media/media-similarity-contracts.cjs');
 const { MediaPreviewService } = require('../media/media-preview-service.cjs');
 const { MediaIndexService } = require('../media/media-index-service.cjs');
+const { MediaSimilarityService } = require('../media/media-similarity-service.cjs');
 const { createElectronPreviewGenerators } = require('../media/electron-preview-generators.cjs');
+const { createElectronSimilarityFingerprintProvider } = require('../media/electron-similarity-fingerprints.cjs');
 const {
   installMediaPreviewProtocol,
   registerMediaPreviewScheme
@@ -27,6 +36,7 @@ const CACHE_DIRECTORY_NAME = 'cache';
 const MEDIA_DIRECTORY_NAME = 'media';
 const MEDIA_PREVIEW_DIRECTORY_NAME = 'media-previews';
 const MEDIA_INDEX_DIRECTORY_NAME = 'media-index';
+const MEDIA_SIMILARITY_DIRECTORY_NAME = 'media-similarity';
 const MEDIA_PREVIEW_GENERATOR_VERSION = 'electron-native-preview-v1';
 
 registerMediaPreviewScheme(protocol);
@@ -36,6 +46,8 @@ let mediaPreviewService = null;
 let mediaPreviewServicePromise = null;
 let mediaIndexService = null;
 let mediaIndexServicePromise = null;
+let mediaSimilarityService = null;
+let mediaSimilarityServicePromise = null;
 let previewProtocolInstalled = false;
 
 function sanitisePreviewError(error) {
@@ -68,6 +80,23 @@ function sanitiseIndexError(error) {
   });
 }
 
+function sanitiseSimilarityError(error) {
+  const code = error instanceof TypeError ? 'INVALID_REQUEST' : typeof error?.code === 'string' ? error.code : 'MEDIA_SIMILARITY_ERROR';
+  const messages = Object.freeze({
+    INVALID_REQUEST: 'The media similarity request was invalid.',
+    MEDIA_NOT_FOUND: 'The requested local media item is no longer available.',
+    SIMILARITY_SOURCE_UNAVAILABLE: 'The local source media is unavailable for similarity analysis.',
+    SIMILARITY_SOURCE_INVALID: 'The local source media identity could not be validated.',
+    SIMILARITY_SOURCE_CHANGED: 'The managed media changed after import, so similarity analysis was not run.',
+    SIMILARITY_PATH_INVALID: 'The local media path could not be resolved safely.',
+    SIMILARITY_FINGERPRINT_INVALID: 'A local perceptual fingerprint could not be produced safely.'
+  });
+  return Object.freeze({
+    code,
+    message: messages[code] ?? 'Local media similarity analysis failed. Source media and user decisions were preserved.'
+  });
+}
+
 async function previewResult(operation) {
   try {
     return Object.freeze({ ok: true, value: await operation() });
@@ -81,6 +110,14 @@ async function indexResult(operation) {
     return Object.freeze({ ok: true, value: await operation() });
   } catch (error) {
     return Object.freeze({ ok: false, error: sanitiseIndexError(error) });
+  }
+}
+
+async function similarityResult(operation) {
+  try {
+    return Object.freeze({ ok: true, value: await operation() });
+  } catch (error) {
+    return Object.freeze({ ok: false, error: sanitiseSimilarityError(error) });
   }
 }
 
@@ -125,6 +162,27 @@ async function getMediaIndexService() {
   return mediaIndexServicePromise;
 }
 
+async function getMediaSimilarityService() {
+  if (mediaSimilarityService) return mediaSimilarityService;
+  if (!mediaSimilarityServicePromise) {
+    mediaSimilarityServicePromise = (async () => {
+      const repository = await foundation.initialiseLocalDataRepository();
+      const service = await MediaSimilarityService.open({
+        rootDirectory: path.join(app.getPath('userData'), CACHE_DIRECTORY_NAME, MEDIA_SIMILARITY_DIRECTORY_NAME),
+        mediaRootDirectory: path.join(app.getPath('userData'), MEDIA_DIRECTORY_NAME),
+        repository,
+        fingerprintProvider: createElectronSimilarityFingerprintProvider()
+      });
+      mediaSimilarityService = service;
+      return service;
+    })().catch((error) => {
+      mediaSimilarityServicePromise = null;
+      throw error;
+    });
+  }
+  return mediaSimilarityServicePromise;
+}
+
 function registerPreviewIpcHandlers() {
   ipcMain.handle(MEDIA_IPC_CHANNELS.preview, (_event, request) =>
     previewResult(async () => {
@@ -160,6 +218,24 @@ function registerMediaIndexIpcHandlers() {
   );
 }
 
+function registerMediaSimilarityIpcHandlers() {
+  ipcMain.handle(MEDIA_SIMILARITY_IPC_CHANNELS.find, (_event, request) =>
+    similarityResult(async () => (await getMediaSimilarityService()).findSimilar(validateFindSimilarityRequest(request)))
+  );
+  ipcMain.handle(MEDIA_SIMILARITY_IPC_CHANNELS.status, (_event, request) =>
+    similarityResult(async () => {
+      if (!isExactSimilarityRequest(request, MEDIA_SIMILARITY_STATUS_REQUEST)) throw new TypeError('Invalid media similarity status request.');
+      return (await getMediaSimilarityService()).getStatus();
+    })
+  );
+  ipcMain.handle(MEDIA_SIMILARITY_IPC_CHANNELS.rebuild, (_event, request) =>
+    similarityResult(async () => {
+      if (!isExactSimilarityRequest(request, MEDIA_SIMILARITY_REBUILD_REQUEST)) throw new TypeError('Invalid media similarity rebuild request.');
+      return (await getMediaSimilarityService()).rebuild();
+    })
+  );
+}
+
 async function installPreviewProtocol() {
   if (previewProtocolInstalled) return;
   await installMediaPreviewProtocol({
@@ -173,11 +249,15 @@ async function installPreviewProtocol() {
 
 registerPreviewIpcHandlers();
 registerMediaIndexIpcHandlers();
+registerMediaSimilarityIpcHandlers();
 app.whenReady().then(installPreviewProtocol).catch(() => {
   // The foundation app remains usable if the rebuildable preview cache cannot start.
 });
 app.whenReady().then(() => getMediaIndexService()).catch(() => {
   // Search remains safely unavailable; authoritative media/project data is untouched.
+});
+app.whenReady().then(() => getMediaSimilarityService()).catch(() => {
+  // Similarity remains safely unavailable; source media and user decisions are untouched.
 });
 
 app.on('before-quit', () => {
@@ -188,11 +268,15 @@ module.exports = {
   MEDIA_PREVIEW_GENERATOR_VERSION,
   getMediaIndexService,
   getMediaPreviewService,
+  getMediaSimilarityService,
   indexResult,
   installPreviewProtocol,
   previewResult,
   registerMediaIndexIpcHandlers,
+  registerMediaSimilarityIpcHandlers,
   registerPreviewIpcHandlers,
   sanitiseIndexError,
-  sanitisePreviewError
+  sanitisePreviewError,
+  sanitiseSimilarityError,
+  similarityResult
 };
