@@ -31,7 +31,7 @@ function read(relativePath) {
 test('package metadata and required developer commands are authoritative', () => {
   assert.equal(packageJson.name, 'swayforge');
   assert.match(packageJson.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
-  assert.equal(packageJson.main, 'src/main/main-process.cjs');
+  assert.equal(packageJson.main, 'src/main/preview-bootstrap.cjs');
   assert.equal(packageJson.devDependencies.electron, '43.3.0');
   for (const script of ['start', 'test', 'check', 'lint']) {
     assert.equal(typeof packageJson.scripts[script], 'string');
