@@ -34,13 +34,30 @@ function orientation(width, height) {
 
 function cleanDerivedList(value) {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, MAX_DERIVED_ITEMS).map((item) => normaliseText(item)).filter(Boolean);
+  return [...new Set(value.slice(0, MAX_DERIVED_ITEMS).map((item) => normaliseText(item)).filter(Boolean))];
 }
 
-function sourceFingerprint(media, projectIds) {
+function cleanDerivedIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.slice(0, MAX_DERIVED_ITEMS).filter((item) => typeof item === 'string' && item.length > 0 && item.length <= 128))];
+}
+
+function canonicalDerived(derived = {}) {
+  return {
+    userTagIds: cleanDerivedIds(derived.userTagIds),
+    userTags: cleanDerivedList(derived.userTags),
+    collectionIds: cleanDerivedIds(derived.collectionIds),
+    collectionNames: cleanDerivedList(derived.collectionNames),
+    aiLabels: cleanDerivedList(derived.aiLabels),
+    aiDescription: normaliseText(derived.aiDescription)
+  };
+}
+
+function baseSourceFingerprint(media, projectIds) {
   const payload = JSON.stringify({
     id: media.id,
     originalFilename: media.originalFilename,
+    fileSize: Number.isSafeInteger(media.fileSize) ? media.fileSize : null,
     kind: media.kind,
     width: media.width ?? null,
     height: media.height ?? null,
@@ -50,6 +67,12 @@ function sourceFingerprint(media, projectIds) {
     projectIds: [...projectIds].sort()
   });
   return createHash('sha256').update(payload).digest('hex');
+}
+
+function sourceFingerprint(media, projectIds, derived = {}) {
+  return createHash('sha256')
+    .update(`${baseSourceFingerprint(media, projectIds)}:${JSON.stringify(canonicalDerived(derived))}`)
+    .digest('hex');
 }
 
 function buildSearchText(entry) {
@@ -64,7 +87,9 @@ function freezeEntry(entry) {
   return Object.freeze({
     ...entry,
     projectIds: Object.freeze([...entry.projectIds]),
+    userTagIds: Object.freeze([...entry.userTagIds]),
     userTags: Object.freeze([...entry.userTags]),
+    collectionIds: Object.freeze([...entry.collectionIds]),
     collectionNames: Object.freeze([...entry.collectionNames]),
     aiLabels: Object.freeze([...entry.aiLabels])
   });
@@ -79,16 +104,21 @@ function assertIndexDocument(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Index document must be an object.');
   if (value.schemaVersion !== MEDIA_INDEX_SCHEMA_VERSION) throw Object.assign(new Error('Media index schema is stale.'), { code: 'MEDIA_INDEX_SCHEMA_MISMATCH' });
   if (!Number.isSafeInteger(value.sourceRevision) || value.sourceRevision < 0 || !Array.isArray(value.entries)) throw new TypeError('Index document is invalid.');
+  if (value.organisationFingerprint !== undefined && value.organisationFingerprint !== null && !/^[a-f0-9]{64}$/.test(value.organisationFingerprint)) {
+    throw new TypeError('Index organisation fingerprint is invalid.');
+  }
 }
 
 function createEntry(media, projectIds, derived = {}) {
   const filename = normaliseText(media.originalFilename, 512);
   const stem = normaliseText(path.parse(filename).name, 512);
+  const cleanDerived = canonicalDerived(derived);
   const entry = {
     mediaId: media.id,
     filename,
     filenameStem: stem,
     filenameTokens: tokens(stem),
+    fileSize: Number.isSafeInteger(media.fileSize) ? media.fileSize : null,
     kind: media.kind,
     width: Number.isFinite(media.width) ? media.width : null,
     height: Number.isFinite(media.height) ? media.height : null,
@@ -99,11 +129,9 @@ function createEntry(media, projectIds, derived = {}) {
     availability: media.availability,
     projectIds: [...projectIds].sort(),
     exactDuplicateState: 'canonical',
-    sourceFingerprint: sourceFingerprint(media, projectIds),
-    userTags: cleanDerivedList(derived.userTags),
-    collectionNames: cleanDerivedList(derived.collectionNames),
-    aiLabels: cleanDerivedList(derived.aiLabels),
-    aiDescription: normaliseText(derived.aiDescription),
+    baseSourceFingerprint: baseSourceFingerprint(media, projectIds),
+    sourceFingerprint: sourceFingerprint(media, projectIds, cleanDerived),
+    ...cleanDerived,
     searchText: ''
   };
   entry.searchText = buildSearchText(entry);
@@ -116,6 +144,7 @@ function compare(sort) {
     case 'imported-asc': return (a, b) => stable(a, b, a.importedAt.localeCompare(b.importedAt));
     case 'filename-asc': return (a, b) => stable(a, b, a.filename.localeCompare(b.filename, undefined, { sensitivity: 'base' }));
     case 'filename-desc': return (a, b) => stable(a, b, b.filename.localeCompare(a.filename, undefined, { sensitivity: 'base' }));
+    case 'kind-asc': return (a, b) => stable(a, b, a.kind.localeCompare(b.kind) || a.filename.localeCompare(b.filename, undefined, { sensitivity: 'base' }));
     case 'duration-asc': return (a, b) => stable(a, b, (a.durationSeconds ?? Infinity) - (b.durationSeconds ?? Infinity));
     case 'duration-desc': return (a, b) => stable(a, b, (b.durationSeconds ?? -1) - (a.durationSeconds ?? -1));
     default: return (a, b) => stable(a, b, b.importedAt.localeCompare(a.importedAt));
@@ -138,6 +167,7 @@ class MediaIndexService {
     this.repository = repository;
     this.derivedMetadataProviders = [...derivedMetadataProviders];
     this.sourceRevision = -1;
+    this.organisationFingerprint = null;
     this.entries = new Map();
     this.lastRebuildReason = 'not-initialised';
     this.lastSyncChangedCount = 0;
@@ -150,6 +180,7 @@ class MediaIndexService {
       const parsed = JSON.parse(await fs.readFile(this.indexPath, 'utf8'));
       assertIndexDocument(parsed);
       this.sourceRevision = parsed.sourceRevision;
+      this.organisationFingerprint = parsed.organisationFingerprint ?? null;
       this.entries = new Map(parsed.entries.map((raw) => {
         const entry = freezeEntry({ ...raw, searchText: buildSearchText(raw) });
         return [entry.mediaId, entry];
@@ -157,7 +188,9 @@ class MediaIndexService {
       this.lastRebuildReason = 'loaded';
       this.lastSyncChangedCount = 0;
     } catch (error) {
-      if (error?.code !== 'ENOENT') await this.quarantineBrokenIndex().catch(() => {});
+      if (error?.code !== 'ENOENT') if (error?.code !== 'ENOENT') {
+        await this.quarantineBrokenIndex().catch(() => {});
+      }
       await this.rebuild(error?.code === 'MEDIA_INDEX_SCHEMA_MISMATCH' ? 'schema-mismatch' : 'missing-or-corrupt');
       return;
     }
@@ -165,163 +198,143 @@ class MediaIndexService {
   }
 
   async quarantineBrokenIndex() {
-    const destination = path.join(this.rootDirectory, `index.corrupt-${Date.now()}-${randomUUID()}.json`);
-    await fs.rename(this.indexPath, destination).catch((error) => {
-      if (error?.code !== 'ENOENT') throw error;
-    });
-  }
+    const destination = path.join(this.rootDirectory,  index.corrupt-${Date.now()}-${randomUUID()}.json`);
+    await fs.rename(this.indexPath, destination).catch((error) => { if (error?.code !== 'ENOENT')›İÈ\œ›ÜÈJNÂˆB‚ˆ\Ş[˜È™XY›Ú™Xİ™Y™\™[˜Ù\Ê
+HÂˆÛÛœİİ]]H™]ÈX\
 
-  async readProjectReferences() {
-    const output = new Map();
-    if (typeof this.repository.listProjects !== 'function' || typeof this.repository.readProject !== 'function') return output;
-    const projects = await this.repository.listProjects();
-    for (const summary of projects.projects ?? []) {
-      const detail = await this.repository.readProject({ projectId: summary.id });
-      for (const mediaId of detail.project?.mediaIds ?? []) {
-        if (!output.has(mediaId)) output.set(mediaId, []);
-        output.get(mediaId).push(summary.id);
-      }
-    }
-    return output;
-  }
+NÂˆYˆ
+\[Ùˆ\Ëœ™\ÜÚ]ÜK›\İ›Ú™XİÈOOH	Ù[˜İ[Û‰È\[Ùˆ\Ëœ™\ÜÚ]ÜKœ™XY›Ú™XİOOH	Ù[˜İ[Û‰ÊH™]\›ˆİ]]ÂˆÛÛœİ›Ú™XİÈH]ØZ]\Ëœ™\ÜÚ]ÜK›\İ›Ú™XİÊ
+NÂˆ›Üˆ
+ÛÛœİİ[[X\HÙˆ›Ú™XİËœ›Ú™XİÈÏÈ×JHÂˆÛÛœİ]Z[H]ØZ]\Ëœ™\ÜÚ]ÜKœ™XY›Ú™Xİ
+È›Ú™XİYˆİ[[X\KšYJNÂˆ›Üˆ
+ÛÛœİYYXRYÙˆ]Z[œ›Ú™XİË›YYXRYÈÏÈ×JHÂˆYˆ
+[İ]]š\ÊYYXRY
+JHİ]]œÙ]
+YYXRY×JNÂˆİ]]™Ù]
+YYXRY
+Kœ\Ú
+İ[[X\KšY
+NÂˆBˆBˆ™]\›ˆİ]]ÂˆB‚ˆ\Ş[˜ÈÙ]Ü™Ø[š\Ø][Û‘š[™Ù\œš[
 
-  async getDerivedMetadata(media) {
-    const merged = {};
-    for (const provider of this.derivedMetadataProviders) {
-      const value = await provider(media);
-      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-      for (const key of ['userTags', 'collectionNames', 'aiLabels', 'aiDescription']) if (Object.hasOwn(value, key)) merged[key] = value[key];
-    }
-    return merged;
-  }
+HÂˆYˆ
+\[Ùˆ\Ëœ™\ÜÚ]ÜKœ™XYYYXSÜ™Ø[š\Ø][ÛˆOOH	Ù[˜İ[Û‰ÊH™]\›ˆ[ÂˆÛÛœİÛ˜\ÚİH]ØZ]\Ëœ™\ÜÚ]ÜKœ™XYYYXSÜ™Ø[š\Ø][ÛŠ
+NÂˆ™]\›ˆÜ™X]R\Ú
+	ÜÚLM‰ÊK\]J”ÓÓ‹œİš[™ÚYJÛ˜\ÚİË›Ü™Ø[š\Ø][ÛˆÏÈ[
+JK™YÙ\İ
+	Ú^	ÊNÂˆB‚ˆ\Ş[˜ÈÙ]\š]™YY]Y]JYYXJHÂˆÛÛœİY\™ÙYHßNÂˆ›Üˆ
+ÛÛœİ›İšY\ˆÙˆ\Ë™\š]™YY]Y]T›İšY\œÊHÂˆÛÛœİ˜[YHH]ØZ]›İšY\ŠYYXJNÂˆYˆ
+]˜[YH\[Ùˆ˜[YHOOH	ÛØš™Xİ	È\œ˜^Kš\Ğ\œ˜^J˜[YJJHÛÛ[YNÂˆ›Üˆ
+ÛÛœİÙ^HÙˆÉİ\Ù\•YÒYÉË	İ\Ù\•YÜÉË	ØÛÛXİ[Û’YÉË	ØÛÛXİ[Û“˜[Y\ÉË	ØZSX™[ÉË	ØZQ\ØÜš\[Û‰×JHÂˆYˆ
+Øš™Xİš\ÓİÛŠ˜[YKÙ^JJHY\™ÙYÚÙ^WHH˜[YVÚÙ^WNÂˆBˆBˆ™]\›ˆY\™ÙYÂˆB‚ˆ\Ş[˜È™XZ[
+™X\ÛÛˆH	Ù^XÚ]	ÊHÂˆ™]\›ˆ\ËœŞ[˜Ú›Ûš\ÙJÈ›Ü˜ÙT™XZ[ˆYK™X\ÛÛˆJNÂˆB‚ˆ\Ş[˜ÈŞ[˜Ú›Ûš\ÙJÈ›Ü˜ÙT™XZ[H˜[ÙK™X\ÛÛˆH	ÜÛİ\˜ÙK\™]š\Ú[Û‹XÚ[™ÙY	ÈHHßJHÂˆYˆ
+\Ëœ™Yœ™\Ú›ÛZ\ÙJH™]\›ˆ\Ëœ™Yœ™\Ú›ÛZ\ÙNÂˆ\Ëœ™Yœ™\Ú›ÛZ\ÙHH
+\Ş[˜È
 
-  async rebuild(reason = 'explicit') {
-    return this.synchronise({ forceRebuild: true, reason });
-  }
+HOˆÂˆÛÛœİYYXTÛ˜\ÚİH]ØZ]\Ëœ™\ÜÚ]ÜK›\İYYXJ
+NÂˆÛÛœİ›Ú™Xİ™Y™\™[˜Ù\ÈH]ØZ]\Ëœ™XY›Ú™Xİ™Y™\™[˜Ù\Ê
+NÂˆÛÛœİÜ™Ø[š\Ø][Û‘š[™Ù\œš[H]ØZ]\Ë™Ù]Ü™Ø[š\Ø][Û‘š[™Ù\œš[
 
-  async synchronise({ forceRebuild = false, reason = 'source-revision-changed' } = {}) {
-    if (this.refreshPromise) return this.refreshPromise;
-    this.refreshPromise = (async () => {
-      const mediaSnapshot = await this.repository.listMedia();
-      const projectReferences = await this.readProjectReferences();
-      const next = new Map();
-      let changedCount = 0;
+NÂˆÛÛœİ\š]™Y[˜[Y]YH›Ü˜ÙT™XZ[Ü™Ø[š\Ø][Û‘š[™Ù\œš[OOH\Ë›Ü™Ø[š\Ø][Û‘š[™Ù\œš[ÂˆÛÛœİ™^H™]ÈX\
 
-      for (const media of mediaSnapshot.media ?? []) {
-        const projectIds = projectReferences.get(media.id) ?? [];
-        const fingerprint = sourceFingerprint(media, projectIds);
-        const existing = this.entries.get(media.id);
-        if (!forceRebuild && existing?.sourceFingerprint === fingerprint) {
-          next.set(media.id, existing);
-          continue;
-        }
-        const derived = await this.getDerivedMetadata(media);
-        const entry = createEntry(media, projectIds, derived);
-        next.set(entry.mediaId, entry);
-        changedCount += 1;
-      }
+NÂˆ]Ú[™ÙYÛİ[HÂˆ›Üˆ
+ÛÛœİYYXHÙˆYYXTÛ˜\Úİ›YYXHÏÈ×JHÂˆÛÛœİ›Ú™XİYÈH›Ú™Xİ™Y™\™[˜Ù\Ë™Ù]
+YYXKšY
+HÏÈ×NÂˆÛÛœİ˜\ÙQš[™Ù\œš[H˜\ÙTÛİ\˜ÙQš[™Ù\œš[
+YYXK›Ú™XİYÊNÂˆÛÛœİ^\İ[™ÈH\Ë™[šY\Ë™Ù]
+YYXKšY
+NÂˆYˆ
+Y\š]™Y[˜[Y]Y	‰ˆ^\İ[™ÏË˜˜\ÙTÛİ\˜ÙQš[™Ù\œš[OOH˜\ÙQš[™Ù\œš[
+HÂˆ™^œÙ]
+YYXKšY^\İ[™ÊNÂˆÛÛ[YNÂˆBˆÛÛœİ\š]™YH]ØZ]\Ë™Ù]\š]™YY]Y]JYYXJNÂˆÛÛœİ[HHÜ™X]Q[JYYXK›Ú™XİYË\š]™Y
+NÂˆ™^œÙ]
+[K›YYXRY[JNÂˆÚ[™ÙYÛİ[
+ÏHNÂˆBˆ›Üˆ
+ÛÛœİYYXRYÙˆ\Ë™[šY\ËšÙ^\Ê
+JHYˆ
+[™^š\ÊYYXRY
+JHÚ[™ÙYÛİ[
+ÏHNÂˆ\Ë™[šY\ÈH™^Âˆ\ËœÛİ\˜ÙT™]š\Ú[ÛˆHYYXTÛ˜\ÚİœİÜ™T™]š\Ú[ÛÂˆ\Ë›Ü™Ø[š\Ø][Û‘š[™Ù\œš[HÜ™Ø[š\Ø][Û‘š[™Ù\œš[Âˆ\Ë›\İ™XZ[™X\ÛÛˆH™X\ÛÛÂˆ\Ë›\İŞ[˜ĞÚ[™ÙYÛİ[HÚ[™ÙYÛİ[Âˆ]ØZ]\Ëœ\œÚ\İ
 
-      for (const mediaId of this.entries.keys()) if (!next.has(mediaId)) changedCount += 1;
-      this.entries = next;
-      this.sourceRevision = mediaSnapshot.storeRevision;
-      this.lastRebuildReason = reason;
-      this.lastSyncChangedCount = changedCount;
-      await this.persist();
-      return this.getStatus();
-    })().finally(() => { this.refreshPromise = null; });
-    return this.refreshPromise;
-  }
+NÂˆ™]\›ˆ\Ë™Ù]İ]\Ê
+NÂˆJJ
+K™š[˜[J
 
-  async refreshIfStale() {
-    const revision = this.repository.getStorageSummary().revision;
-    if (revision === this.sourceRevision) return false;
-    await this.synchronise({ reason: 'source-revision-changed' });
-    return true;
-  }
+HOˆÈ\Ëœ™Yœ™\Ú›ÛZ\ÙHH[ÈJNÂˆ™]\›ˆ\Ëœ™Yœ™\Ú›ÛZ\ÙNÂˆB‚ˆ\Ş[˜È™Yœ™\ÚY”İ[J
+HÂˆÛÛœİ™]š\Ú[ÛˆH\Ëœ™\ÜÚ]ÜK™Ù]İÜ˜YÙTİ[[X\J
+Kœ™]š\Ú[ÛÂˆYˆ
+™]š\Ú[ÛˆOOH\ËœÛİ\˜ÙT™]š\Ú[ÛŠH™]\›ˆ˜[ÙNÂˆ]ØZ]\ËœŞ[˜Ú›Ûš\ÙJÈ™X\ÛÛˆ	ÜÛİ\˜ÙK\™]š\Ú[Û‹XÚ[™ÙY	ÈJNÂˆ™]\›ˆYNÂˆB‚ˆ\Ş[˜È\œÚ\İ
 
-  async persist() {
-    const document = {
-      schemaVersion: MEDIA_INDEX_SCHEMA_VERSION,
-      sourceRevision: this.sourceRevision,
-      entries: [...this.entries.values()].sort((a, b) => a.mediaId.localeCompare(b.mediaId)).map(serialisableEntry)
-    };
-    const staging = `${this.indexPath}.staging-${process.pid}-${randomUUID()}`;
-    await fs.writeFile(staging, `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-    await fs.rename(staging, this.indexPath);
-  }
+HÂˆÛÛœİØİ[Y[HÂˆØÚ[XU™\œÚ[ÛˆQQPWÒS‘VÔĞÒSPWÕ‘T”ÒSÓ‹ˆÛİ\˜ÙT™]š\Ú[Ûˆ\ËœÛİ\˜ÙT™]š\Ú[Û‹ˆÜ™Ø[š\Ø][Û‘š[™Ù\œš[ˆ\Ë›Ü™Ø[š\Ø][Û‘š[™Ù\œš[ˆ[šY\ÎˆË‹‹\Ë™[šY\Ë˜[Y\Ê
+WKœÛÜ
 
-  getStatus() {
-    return Object.freeze({
-      schemaVersion: MEDIA_INDEX_SCHEMA_VERSION,
-      sourceRevision: this.sourceRevision,
-      entryCount: this.entries.size,
-      state: 'ready',
-      rebuildable: true,
-      localOnly: true,
-      lastRebuildReason: this.lastRebuildReason,
-      lastSyncChangedCount: this.lastSyncChangedCount
-    });
-  }
+KŠHOˆK›YYXRY›ØØ[PÛÛ\\™J‹›YYXRY
+JK›X\
+Ù\šX[\ØX›Q[JBˆNÂˆÛÛœİİYÚ[™ÈH	İ\Ëš[™^]KœİYÚ[™ËIÜ›ØÙ\ÜËœYKIÜ˜[™ÛUURQ
 
-  matchSources(entry, queryTokens) {
-    if (queryTokens.length === 0) return [];
-    const sources = [];
-    const matchesAll = queryTokens.every((token) => entry.searchText.includes(token));
-    if (!matchesAll) return null;
-    const filenameText = entry.filenameStem.toLocaleLowerCase();
-    if (queryTokens.some((token) => filenameText.includes(token))) sources.push('filename');
-    const tags = [...entry.userTags, ...entry.collectionNames].join(' ').toLocaleLowerCase();
-    if (queryTokens.some((token) => tags.includes(token))) sources.push('user-tag');
-    const ai = [...entry.aiLabels, entry.aiDescription].join(' ').toLocaleLowerCase();
-    if (queryTokens.some((token) => ai.includes(token))) sources.push('ai-label');
-    return sources;
-  }
+_XÂˆ]ØZ]œËÜš]Qš[JİYÚ[™Ë	Ò”ÓÓ‹œİš[™ÚYJØİ[Y[[Š_W˜È[ÙNˆÍŒ›YÎˆ	İŞ	ÈJNÂˆ]ØZ]œËœ™[˜[YJİYÚ[™Ë\Ëš[™^]
+NÂˆB‚ˆÙ]İ]\Ê
+HÂˆ™]\›ˆØš™Xİ™œ™Y^™JÂˆØÚ[XU™\œÚ[ÛˆQQPWÒS‘VÔĞÒSPWÕ‘T”ÒSÓ‹ˆÛİ\˜ÙT™]š\Ú[Ûˆ\ËœÛİ\˜ÙT™]š\Ú[Û‹ˆ[PÛİ[ˆ\Ë™[šY\ËœÚ^™Kˆİ]Nˆ	Ü™XYIËˆ™XZ[X›NˆYKˆØØ[Û›NˆYKˆ\İ™XZ[™X\ÛÛˆ\Ë›\İ™XZ[™X\ÛÛ‹ˆ\İŞ[˜ĞÚ[™ÙYÛİ[ˆ\Ë›\İŞ[˜ĞÚ[™ÙYÛİ[ˆJNÂˆB‚ˆX]ÚÛİ\˜Ù\Ê[K]Y\UÚÙ[œÊHÂˆYˆ
+]Y\UÚÙ[œË›[™İOOH
+H™]\›ˆ×NÂˆYˆ
+\]Y\UÚÙ[œË™]™\J
+ÚÙ[ŠHOˆ[KœÙX\˜Ú^š[˜ÛY\ÊÚÙ[ŠJJH™]\›ˆ[ÂˆÛÛœİÛİ\˜Ù\ÈH×NÂˆYˆ
+]Y\UÚÙ[œËœÛÛYJ
+ÚÙ[ŠHOˆ[K™š[[˜[YTİ[KÓØØ[SİÙ\Ø\ÙJ
+Kš[˜ÛY\ÊÚÙ[ŠJJHÛİ\˜Ù\Ëœ\Ú
+	Ùš[[˜[YIÊNÂˆYˆ
+]Y\UÚÙ[œËœÛÛYJ
+ÚÙ[ŠHOˆ[K\Ù\•YÜËš›Ú[Š	È	ÊKÓØØ[SİÙ\Ø\ÙJ
+Kš[˜ÛY\ÊÚÙ[ŠJJHÛİ\˜Ù\Ëœ\Ú
+	İ\Ù\‹]YÉÊNÂˆYˆ
+]Y\UÚÙ[œËœÛÛYJ
+ÚÙ[ŠHOˆ[K˜ÛÛXİ[Û“˜[Y\Ëš›Ú[Š	È	ÊKÓØØ[SİÙ\Ø\ÙJ
+Kš[˜ÛY\ÊÚÙ[ŠJJHÛİ\˜Ù\Ëœ\Ú
+	ØÛÛXİ[Û‰ÊNÂˆYˆ
+]Y\UÚÙ[œËœÛÛYJ
+ÚÙ[ŠHOˆË‹‹™[K˜ZSX™[Ë[K˜ZQ\ØÜš\[Û—Kš›Ú[Š	È	ÊKÓØØ[SİÙ\Ø\ÙJ
+Kš[˜ÛY\ÊÚÙ[ŠJJHÛİ\˜Ù\Ëœ\Ú
+	ØZK[X™[	ÊNÂˆ™]\›ˆÛİ\˜Ù\ÎÂˆB‚ˆ\Ş[˜ÈÙX\˜Ú
+™\]Y\İ
+HÂˆ]ØZ]\Ëœ™Yœ™\ÚY”İ[J
+NÂˆÛÛœİ]Y\UÚÙ[œÈHÚÙ[œÊ™\]Y\İœ]Y\JNÂˆ]][\ÈH×NÂˆ›Üˆ
+ÛÛœİ[HÙˆ\Ë™[šY\Ë˜[Y\Ê
+JHÂˆYˆ
+™\]Y\İYÒYÏË›[™İ	‰ˆ\™\]Y\İYÒYË™]™\J
+YÒY
+HOˆ[K\Ù\•YÒYËš[˜ÛY\ÊYÒY
+JJHÛÛ[YNÂˆYˆ
+™\]Y\İ˜ÛÛXİ[Û’Y	‰ˆY[K˜ÛÛXİ[Û’YËš[˜ÛY\Ê™\]Y\İ˜ÛÛXİ[Û’Y
+JHÛÛ[YNÂˆYˆ
+™\]Y\İ›YYXRÚ[™	‰ˆ[KšÚ[™OOH™\]Y\İ›YYXRÚ[™
+HÛÛ[YNÂˆYˆ
+™\]Y\İ˜]˜Z[Xš[]H	‰ˆ[K˜]˜Z[Xš[]HOOH™\]Y\İ˜]˜Z[Xš[]JHÛÛ[YNÂˆYˆ
+™\]Y\İ›ÜšY[][Ûˆ	‰ˆ[K›ÜšY[][ÛˆOOH™\]Y\İ›ÜšY[][ÛŠHÛÛ[YNÂˆYˆ
+™\]Y\İš[\ÜYY\ˆ	‰ˆ[Kš[\ÜY]™\]Y\İš[\ÜYY\ŠHÛÛ[YNÂˆYˆ
+™\]Y\İš[\ÜY™Y›Ü™H	‰ˆ[Kš[\ÜY]ˆ™\]Y\İš[\ÜY™Y›Ü™JHÛÛ[YNÂˆYˆ
+™\]Y\İ›Z[‘\˜][Û”ÙXÛÛ™ÈOOH[	‰ˆ
+[K™\˜][Û”ÙXÛÛ™ÈOOH[[K™\˜][Û”ÙXÛÛ™È™\]Y\İ›Z[‘\˜][Û”ÙXÛÛ™ÊJHÛÛ[YNÂˆYˆ
+™\]Y\İ›X^\˜][Û”ÙXÛÛ™ÈOOH[	‰ˆ
+[K™\˜][Û”ÙXÛÛ™ÈOOH[[K™\˜][Û”ÙXÛÛ™Èˆ™\]Y\İ›X^\˜][Û”ÙXÛÛ™ÊJHÛÛ[YNÂˆYˆ
+™\]Y\İ›Z[•ÚYOOH[	‰ˆ
+[KÚYOOH[[KÚY™\]Y\İ›Z[•ÚY
+JHÛÛ[YNÂˆYˆ
+™\]Y\İ›X^ÚYOOH[	‰ˆ
+[KÚYOOH[[KÚYˆ™\]Y\İ›X^ÚY
+JHÛÛ[YNÂˆYˆ
+™\]Y\İ›Z[’ZYÚOOH[	‰ˆ
+[KšZYÚOOH[[KšZYÚ™\]Y\İ›Z[’ZYÚ
+JHÛÛ[YNÂˆYˆ
+™\]Y\İ›X^ZYÚOOH[	‰ˆ
+[KšZYÚOOH[[KšZYÚˆ™\]Y\İ›X^ZYÚ
+JHÛÛ[YNÂˆÛÛœİX]ÚÛİ\˜Ù\ÈH\Ë›X]ÚÛİ\˜Ù\Ê[K]Y\UÚÙ[œÊNÂˆYˆ
+X]ÚÛİ\˜Ù\ÈOOH[
+HÛÛ[YNÂˆ][\Ëœ\Ú
+È[KX]ÚÛİ\˜Ù\ÈJNÂˆBˆ][\ËœÛÜ
 
-  async search(request) {
-    await this.refreshIfStale();
-    const queryTokens = tokens(request.query);
-    let items = [];
-    for (const entry of this.entries.values()) {
-      if (request.mediaKind && entry.kind !== request.mediaKind) continue;
-      if (request.availability && entry.availability !== request.availability) continue;
-      if (request.importedAfter && entry.importedAt < request.importedAfter) continue;
-      if (request.importedBefore && entry.importedAt > request.importedBefore) continue;
-      if (request.minDurationSeconds !== null && (entry.durationSeconds === null || entry.durationSeconds < request.minDurationSeconds)) continue;
-      if (request.maxDurationSeconds !== null && (entry.durationSeconds === null || entry.durationSeconds > request.maxDurationSeconds)) continue;
-      if (request.minWidth !== null && (entry.width === null || entry.width < request.minWidth)) continue;
-      if (request.maxWidth !== null && (entry.width === null || entry.width > request.maxWidth)) continue;
-      if (request.minHeight !== null && (entry.height === null || entry.height < request.minHeight)) continue;
-      if (request.maxHeight !== null && (entry.height === null || entry.height > request.maxHeight)) continue;
-      const matchSources = this.matchSources(entry, queryTokens);
-      if (matchSources === null) continue;
-      items.push({ entry, matchSources });
-    }
-    items.sort((a, b) => compare(request.sort)(a.entry, b.entry));
-    const total = items.length;
-    items = items.slice(request.offset, request.offset + request.limit).map(({ entry, matchSources }) => Object.freeze({
-      id: entry.mediaId,
-      kind: entry.kind,
-      originalFilename: entry.filename,
-      width: entry.width,
-      height: entry.height,
-      orientation: entry.orientation,
-      durationSeconds: entry.durationSeconds,
-      durationBucket: entry.durationBucket,
-      importedAt: entry.importedAt,
-      availability: entry.availability,
-      projectIds: Object.freeze([...entry.projectIds]),
-      exactDuplicateState: entry.exactDuplicateState,
-      matchSources: Object.freeze([...matchSources])
-    }));
-    return Object.freeze({
-      sourceRevision: this.sourceRevision,
-      total,
-      offset: request.offset,
-      limit: request.limit,
-      hasMore: request.offset + items.length < total,
-      items: Object.freeze(items)
-    });
-  }
-}
+KŠHOˆÛÛ\\™J™\]Y\İœÛÜ
+JK™[K‹™[JJNÂˆÛÛœİİ[H][\Ë›[™İÂˆ][\ÈH][\ËœÛXÙJ™\]Y\İ›Ù™œÙ]™\]Y\İ›Ù™œÙ]
+È™\]Y\İ›[Z]
+K›X\
 
-module.exports = { MediaIndexService, createEntry, durationBucket, orientation, sourceFingerprint, tokens };
+È[KX]ÚÛİ\˜Ù\ÈJHOˆØš™Xİ™œ™Y^™JÂˆYˆ[K›YYXRYˆÚ[™ˆ[KšÚ[™ˆÜšYÚ[˜[š[[˜[YNˆ[K™š[[˜[YKˆš[TÚ^™Nˆ[K™š[TÚ^™KˆÚYˆ[KÚYˆZYÚˆ[KšZYÚˆÜšY[][Ûˆ[K›ÜšY[][Û‹ˆ\˜][Û”ÙXÛÛ™Îˆ[K™\˜][Û”ÙXÛÛ™Ëˆ\˜][ÛXÚÙ]ˆ[K™\˜][ÛXÚÙ]ˆ[\ÜY]ˆ[Kš[\ÜY]ˆ]˜Z[Xš[]Nˆ[K˜]˜Z[Xš[]Kˆ›Ú™XİYÎˆØš™Xİ™œ™Y^™JË‹‹™[Kœ›Ú™XİY×JKˆ\Ù\•YÒYÎˆØš™Xİ™œ™Y^™JË‹‹™[K\Ù\•YÒY×JKˆ\Ù\•YÜÎˆØš™Xİ™œ™Y^™JË‹‹™[K\Ù\•YÜ×JKˆÛÛXİ[Û’YÎˆØš™Xİ™œ™Y^™JË‹‹™[K˜ÛÛXİ[Û’Y×JKˆÛÛXİ[Û“˜[Y\ÎˆØš™Xİ™œ™Y^™JË‹‹™[K˜ÛÛXİ[Û“˜[Y\×JKˆ^Xİ\XØ]Tİ]Nˆ[K™^Xİ\XØ]Tİ]KˆX]ÚÛİ\˜Ù\ÎˆØš™Xİ™œ™Y^™JË‹‹›X]ÚÛİ\˜Ù\×JBˆJJNÂˆ™]\›ˆØš™Xİ™œ™Y^™JÂˆÛİ\˜ÙT™]š\Ú[Ûˆ\ËœÛİ\˜ÙT™]š\Ú[Û‹ˆİ[ˆÙ™œÙ]ˆ™\]Y\İ›Ù™œÙ]ˆ[Z]ˆ™\]Y\İ›[Z]ˆ\Ó[Ü™Nˆ™\]Y\İ›Ù™œÙ]
+È][\Ë›[™İİ[ˆ][\ÎˆØš™Xİ™œ™Y^™J][\ÊBˆJNÂˆBŸB‚›[Ù[K™^ÜÈHÂˆYYXR[™^Ù\šXÙKˆØ[›ÛšXØ[\š]™YˆÜ™X]Q[Kˆ\˜][ÛXÚÙ]ˆÜšY[][Û‹ˆÛİ\˜ÙQš[™Ù\œš[ˆÚÙ[œÂŸNÂ
