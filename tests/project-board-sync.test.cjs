@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   inferMetadata,
@@ -12,8 +14,11 @@ const {
   buildUpdates,
   fieldUpdate,
   validateConfig,
-  projectBase
+  projectBase,
+  redactSensitive
 } = require('../scripts/project-board-sync.cjs');
+
+const root = path.resolve(__dirname, '..');
 
 function issue(overrides = {}) {
   return {
@@ -161,4 +166,17 @@ test('Project REST base is selected from owner type', () => {
     projectBase({ projectOwner: 'org', projectOwnerType: 'organization', projectNumber: 5 }),
     'https://api.github.com/orgs/org/projectsV2/5'
   );
+});
+
+test('Project token-like values are redacted from API failure text', () => {
+  const sentinel = 'ghp_swayforge_project_token_sentinel';
+  assert.equal(redactSensitive(`failure ${sentinel}`, [sentinel]), 'failure [REDACTED]');
+});
+
+test('v0.2.1 is the authoritative application release version', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const lockJson = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+  assert.equal(packageJson.version, '0.2.1');
+  assert.equal(lockJson.version, '0.2.1');
+  assert.equal(lockJson.packages?.['']?.version, '0.2.1');
 });
