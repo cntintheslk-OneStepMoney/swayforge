@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const REQUIRED_FILES = Object.freeze([
   'package.json',
+  'src/main/preview-bootstrap.cjs',
   'src/main/main-process.cjs',
   'src/preload/preload-bridge.cjs',
   'src/renderer/index.html',
@@ -22,7 +23,14 @@ const REQUIRED_FILES = Object.freeze([
   'src/storage/local-data-repository.cjs',
   'src/media/media-contracts.cjs',
   'src/media/media-import-service.cjs',
-  'docs/media-storage.md'
+  'src/media/media-preview-service.cjs',
+  'src/media/media-preview-protocol.cjs',
+  'src/media/electron-preview-generators.cjs',
+  'src/media/image-orientation.cjs',
+  'src/media/video-poster-worker.html',
+  'src/media/video-poster-worker.js',
+  'docs/media-storage.md',
+  'docs/media-previews.md'
 ]);
 
 const FORBIDDEN_BASENAMES = new Set([
@@ -46,10 +54,10 @@ const FORBIDDEN_EXTENSIONS = new Set([
 const IGNORED_DIRECTORIES = new Set(['.git', 'node_modules', 'dist', 'out', 'release', 'coverage']);
 const MAX_SECRET_SCAN_BYTES = 1024 * 1024;
 const LIKELY_SECRET_PATTERNS = Object.freeze([
-  { name: 'private-key header', pattern: /^-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----$/m },
-  { name: 'GitHub token', pattern: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/ },
-  { name: 'OpenAI-style secret key', pattern: /\bsk-[A-Za-z0-9]{32,}\b/ },
-  { name: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/ }
+  { name: 'private-key header', pattern: new RegExp('^-----BEGIN (?:RSA |EC |OPENSSH )?' + 'PRIVATE ' + 'KEY-----$', 'm') },
+  { name: 'GitHub token', pattern: new RegExp('\\bgh' + '[pousr]_' + '[A-Za-z0-9]{30,}\\b') },
+  { name: 'OpenAI-style secret key', pattern: new RegExp('\\b' + 's' + 'k-' + '[A-Za-z0-9]{32,}\\b') },
+  { name: 'AWS access key', pattern: new RegExp('\\b' + 'AK' + 'IA' + '[0-9A-Z]{16}\\b') }
 ]);
 
 function listFiles(root, current = root, output = []) {
@@ -111,7 +119,7 @@ function checkProject(root = process.cwd()) {
   const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
   if (packageJson.name !== 'swayforge') throw new Error('package.json name must be swayforge.');
-  if (packageJson.main !== 'src/main/main-process.cjs') throw new Error('Unexpected Electron main entry.');
+  if (packageJson.main !== 'src/main/preview-bootstrap.cjs') throw new Error('Unexpected Electron main entry.');
 
   for (const scriptName of ['start', 'test', 'check', 'lint']) {
     if (typeof packageJson.scripts?.[scriptName] !== 'string') {

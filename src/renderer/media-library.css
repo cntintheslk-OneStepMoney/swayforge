@@ -128,6 +128,20 @@
   text-align: center;
 }
 
+.media-card__preview--ready {
+  padding: 0;
+  overflow: hidden;
+}
+
+.media-card__preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 9rem;
+  object-fit: cover;
+  background: var(--surface-soft);
+}
+
 .media-card__preview-kind {
   justify-self: center;
   padding: var(--space-1) var(--space-2);
@@ -217,6 +231,10 @@
 .media-library-items[data-layout="list"] .media-card__preview {
   min-height: 7rem;
   height: 100%;
+}
+
+.media-library-items[data-layout="list"] .media-card__preview-image {
+  min-height: 7rem;
 }
 
 .media-library-items[data-layout="list"] .media-card__body {

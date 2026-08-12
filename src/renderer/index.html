@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' swayforge-preview:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     >
     <title>SwayForge</title>
     <link rel="stylesheet" href="./styles.css">
@@ -13,6 +13,7 @@
     <script src="./navigation-model.js" defer></script>
     <script src="./media-library-model.js" defer></script>
     <script src="./media-library.js" defer></script>
+    <script src="./media-preview-library.js" defer></script>
     <script src="./renderer-app.js" defer></script>
   </head>
   <body>

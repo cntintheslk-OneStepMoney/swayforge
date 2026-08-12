@@ -23,7 +23,9 @@ const MEDIA_IPC_CHANNELS = Object.freeze({
   chooseImport: 'swayforge:media:choose-import',
   list: 'swayforge:media:list',
   attach: 'swayforge:media:attach',
-  detach: 'swayforge:media:detach'
+  detach: 'swayforge:media:detach',
+  preview: 'swayforge:media:preview',
+  previewRebuild: 'swayforge:media:preview-rebuild'
 });
 const SETTINGS_IPC_CHANNELS = Object.freeze({
   read: 'swayforge:settings:read',
@@ -58,6 +60,10 @@ function rejectedSettingsMutation() {
   }));
 }
 
+function previewRequest(kind, mediaId) {
+  return Object.freeze({ kind, version: 1, mediaId });
+}
+
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
   healthCheck: () => ipcRenderer.invoke(IPC_CHANNELS.healthCheck, HEALTH_REQUEST),
@@ -77,6 +83,8 @@ const bridge = Object.freeze({
   listMedia: () => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.list),
   attachMediaToProject: (request) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.attach, request),
   detachMediaFromProject: (request) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.detach, request),
+  requestMediaPreview: (mediaId) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.preview, previewRequest('media-preview-request', mediaId)),
+  rebuildMediaPreview: (mediaId) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.previewRebuild, previewRequest('media-preview-rebuild-request', mediaId)),
   getSettings: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.read, SETTINGS_READ_REQUEST),
   updateSettings: (request) => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.update, request),
   listAiModels: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.aiModels, SETTINGS_AI_MODELS_REQUEST),
