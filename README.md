@@ -1,6 +1,8 @@
-# SwayForge
+![Sway Forge — Create smarter. Stay in control.](src/renderer/brand/sway-forge-lockup.svg)
 
-SwayForge is a local-first desktop application for AI-assisted social-content creation, management and publishing. The product goal is to reduce the work of running social accounts without taking control away from the user: models suggest and generate, while deterministic application rules govern what is allowed.
+# Sway Forge
+
+Sway Forge is a local-first desktop application for AI-assisted social-content creation, management and publishing. The product goal is to reduce the work of running social accounts without taking control away from the user: models suggest and generate, while deterministic application rules govern what is allowed.
 
 ## v0.1.0 — Application Foundation
 
@@ -27,7 +29,7 @@ v0.1.0 does **not** connect social accounts, publish or schedule posts, collect 
 - Windows x64 is the verified packaging target for v0.1.0.
 - Node.js 22.12.0 or later.
 - npm.
-- Ollama is optional for application startup and non-AI workflows. When enabled, SwayForge accepts approved local loopback Ollama endpoints only.
+- Ollama is optional for application startup and non-AI workflows. When enabled, Sway Forge accepts approved local loopback Ollama endpoints only.
 
 No model is downloaded automatically and there is no cloud-AI fallback.
 
@@ -69,7 +71,7 @@ npm run dist:win
 src/
   main/         Trusted Electron lifecycle, IPC and application services
   preload/      Narrow renderer capability bridge
-  renderer/     Local HTML/CSS/JS application shell
+  renderer/     Local HTML/CSS/JS application shell and product-owned brand assets
   core/         Shared application contracts
   storage/      Versioned local application/project persistence
   security/     Window, navigation and credential boundaries

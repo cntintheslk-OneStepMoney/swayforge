@@ -44,7 +44,9 @@ test('application shell is semantic, selected state is announced and future area
   for (const key of ['create', 'trends', 'publishing']) {
     assert.match(html, new RegExp(`data-route="${key}"[^>]*aria-disabled="true"[^>]*disabled`));
   }
-  assert.match(html, /Catch the signal\. Forge the content\./);
+  assert.match(html, /Sway Forge/);
+  assert.match(html, /Create smarter\. Stay in control\./);
+  assert.doesNotMatch(html, /Catch the signal\. Forge the content\./);
 });
 
 test('renderer navigation has a one-time boot guard and keyboard support', () => {

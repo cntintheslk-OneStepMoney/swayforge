@@ -7,23 +7,26 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' swayforge-preview:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     >
-    <title>SwayForge</title>
+    <title>Sway Forge</title>
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./branding.css">
     <link rel="stylesheet" href="./media-library.css">
     <script src="./navigation-model.js" defer></script>
     <script src="./media-library-model.js" defer></script>
     <script src="./media-library.js" defer></script>
     <script src="./media-preview-library.js" defer></script>
     <script src="./renderer-app.js" defer></script>
+    <script src="./settings-page.js" defer></script>
+    <script src="./branding.js" defer></script>
   </head>
   <body>
     <div class="app-shell">
       <aside class="app-sidebar" aria-label="Primary application navigation">
         <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">SF</span>
-          <div>
-            <h1>SwayForge</h1>
-            <p>Catch the signal. Forge the content.</p>
+          <img class="brand-mark" src="./brand/sway-forge-mark.svg" alt="" aria-hidden="true">
+          <div class="brand-copy">
+            <h1>Sway Forge</h1>
+            <p>Create smarter. Stay in control.</p>
           </div>
         </div>
 
@@ -62,7 +65,7 @@
           <div>
             <p class="eyebrow">Application foundation</p>
             <h2 id="page-heading">Home</h2>
-            <p id="page-context" class="page-context">Your local SwayForge workspace at a glance.</p>
+            <p id="page-context" class="page-context">Your local Sway Forge workspace at a glance.</p>
           </div>
           <p class="version-badge" aria-label="Application version">Version <span id="app-version">Loading…</span></p>
         </header>
@@ -74,7 +77,7 @@
             <div>
               <p class="eyebrow">Foundation workspace</p>
               <h3>Build locally. Stay in control.</h3>
-              <p>SwayForge keeps the foundation on-device while later AI, trend and publishing layers remain governed by explicit application rules.</p>
+              <p>Sway Forge keeps the foundation on-device while later AI, trend and publishing layers remain governed by explicit application rules.</p>
             </div>
             <div class="button-group" aria-label="Workspace shortcuts">
               <button class="button button--primary" type="button" data-nav-target="projects">Open projects</button>
@@ -218,11 +221,11 @@
             <article class="panel">
               <span class="status-badge">Foundation</span>
               <h3>Settings shell</h3>
-              <p>Ollama configuration, appearance persistence and privacy-safe diagnostics will be completed by #10. This view does not create a competing settings store.</p>
+              <p>Ollama configuration, appearance persistence and privacy-safe diagnostics are loaded through the local settings module.</p>
             </article>
             <article class="panel">
               <h3>Appearance ready</h3>
-              <p>The shared token system supports Light, Dark and System palettes. System is the non-persisted foundation default until settings persistence is integrated.</p>
+              <p>The shared token system supports Light, Dark and System palettes.</p>
             </article>
             <article class="panel">
               <h3>Privacy baseline</h3>

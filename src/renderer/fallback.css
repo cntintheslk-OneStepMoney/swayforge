@@ -16,6 +16,33 @@ main {
   margin: 0 auto;
 }
 
+.fallback-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 2rem;
+}
+
+.fallback-brand img {
+  width: 3rem;
+  height: 3rem;
+}
+
+.fallback-brand div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.fallback-brand strong {
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.fallback-brand span {
+  color: #cbd5e1;
+  font-size: 0.86rem;
+}
+
 h1 {
   font-size: 2rem;
 }
