@@ -21,6 +21,14 @@
     list.append(term, description);
   }
 
+  function appendDetailContent(list, label, content) {
+    const term = createElement('dt', 'media-details__label', label);
+    const description = createElement('dd', 'media-details__value');
+    description.append(content);
+    list.append(term, description);
+    return description;
+  }
+
   class MediaLibraryController {
     constructor({ rootElement }) {
       if (!rootElement) throw new TypeError('Media Library root element is required.');
@@ -231,11 +239,7 @@
       checkbox.dataset.mediaSelect = item.id;
       checkbox.checked = this.selectedIds.has(item.id);
       checkbox.setAttribute('aria-label', `Select ${item.originalFilename}`);
-      const selectionText = createElement(
-        'span',
-        'media-card__selection-text',
-        checkbox.checked ? 'Selected' : 'Not selected'
-      );
+      const selectionText = createElement('span', 'media-card__selection-text', checkbox.checked ? 'Selected' : 'Not selected');
       const inspectButton = createElement('button', 'button button--secondary media-card__inspect', 'Inspect');
       inspectButton.type = 'button';
       inspectButton.dataset.mediaInspect = item.id;
@@ -252,6 +256,74 @@
       this.clearSelectionButton.disabled = count === 0;
     }
 
+    renderAiAnalysis(container, analysis, actionButton) {
+      container.replaceChildren();
+      if (!analysis) {
+        container.append(createElement('p', '', 'Not analysed. Local AI runs only when you choose it.'));
+        actionButton.textContent = 'Analyze locally';
+        container.append(actionButton);
+        return;
+      }
+
+      if (analysis.status === 'ready') {
+        container.append(
+          createElement('p', '', analysis.description),
+          createElement('p', '', `AI-derived · ${analysis.provider || 'local'} · ${analysis.model || 'configured model'}`)
+        );
+        if (analysis.labels?.length) container.append(createElement('p', '', `Suggested labels: ${analysis.labels.join(', ')}`));
+        if (analysis.limitations) container.append(createElement('p', '', `Limitations: ${analysis.limitations}`));
+        actionButton.textContent = 'Re-analyze locally';
+        container.append(actionButton);
+        return;
+      }
+
+      const label = analysis.status === 'unavailable'
+        ? 'Local AI understanding is unavailable with the current model/runtime.'
+        : analysis.status === 'stale'
+          ? 'Stored AI understanding is stale because the source or analysis version changed.'
+          : 'Local AI understanding failed safely; source media was preserved.';
+      container.append(createElement('p', '', label));
+      if (analysis.error?.message) container.append(createElement('p', '', analysis.error.message));
+      actionButton.textContent = analysis.status === 'unavailable' ? 'Check again' : 'Analyze locally';
+      container.append(actionButton);
+    }
+
+    async loadAiAnalysis(item, container, actionButton) {
+      const bridge = root.swayForge;
+      if (!bridge?.getMediaAiAnalysis || this.activeDetailsId !== item.id) return;
+      try {
+        const result = await bridge.getMediaAiAnalysis(item.id);
+        if (this.activeDetailsId !== item.id) return;
+        if (!result?.ok) {
+          container.replaceChildren(createElement('p', '', result?.error?.message || 'Local AI status could not be read safely.'));
+          return;
+        }
+        this.renderAiAnalysis(container, result.value, actionButton);
+      } catch {
+        if (this.activeDetailsId === item.id) container.replaceChildren(createElement('p', '', 'Local AI status could not be read safely.'));
+      }
+    }
+
+    async runAiAnalysis(item, container, actionButton) {
+      const bridge = root.swayForge;
+      if (!bridge?.analyzeMediaLocally || this.activeDetailsId !== item.id) return;
+      actionButton.disabled = true;
+      actionButton.textContent = 'Analyzing locally…';
+      try {
+        const result = await bridge.analyzeMediaLocally(item.id);
+        if (this.activeDetailsId !== item.id) return;
+        if (!result?.ok) {
+          container.replaceChildren(createElement('p', '', result?.error?.message || 'Local AI understanding failed safely.'));
+          return;
+        }
+        this.renderAiAnalysis(container, result.value, actionButton);
+      } catch {
+        if (this.activeDetailsId === item.id) container.replaceChildren(createElement('p', '', 'Local AI understanding failed safely. Source media was preserved.'));
+      } finally {
+        actionButton.disabled = false;
+      }
+    }
+
     openDetails(mediaId, trigger) {
       const item = this.items.find((candidate) => candidate.id === mediaId);
       if (!item) return;
@@ -266,10 +338,19 @@
       if (item.kind === 'video') appendDetailRow(this.detailsBody, 'Duration', model.formatDuration(item.durationSeconds));
       appendDetailRow(this.detailsBody, 'File size', model.formatFileSize(item.fileSize));
       appendDetailRow(this.detailsBody, 'Imported', model.formatDate(item.importedAt));
-      appendDetailRow(this.detailsBody, 'Preview', 'Unavailable until the local preview pipeline is available.');
+      appendDetailRow(this.detailsBody, 'Preview', 'Generated locally from the managed source when needed.');
       appendDetailRow(this.detailsBody, 'Exact duplicate handling', 'Checked by trusted local import; content hashes are not exposed here.');
+
+      const aiContainer = createElement('div', 'media-details__ai');
+      const analyzeButton = createElement('button', 'button button--secondary', 'Analyze locally');
+      analyzeButton.type = 'button';
+      analyzeButton.addEventListener('click', () => this.runAiAnalysis(item, aiContainer, analyzeButton));
+      aiContainer.append(createElement('p', '', 'Reading local AI status…'));
+      appendDetailContent(this.detailsBody, 'Local AI understanding', aiContainer);
+
       this.detailsElement.hidden = false;
       this.detailsCloseButton.focus({ preventScroll: true });
+      void this.loadAiAnalysis(item, aiContainer, analyzeButton);
     }
 
     closeDetails({ restoreFocus = false } = {}) {
