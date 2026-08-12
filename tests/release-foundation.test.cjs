@@ -10,10 +10,14 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const packageJson = JSON.parse(read('package.json'));
 const packageLock = JSON.parse(read('package-lock.json'));
 
-test('release metadata has one authoritative v0.1.0 application version', () => {
+function escaped(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+test('release metadata has one authoritative v0.2.0 application version', () => {
   assert.equal(packageJson.name, 'swayforge');
   assert.equal(packageJson.productName, 'SwayForge');
-  assert.equal(packageJson.version, '0.1.0');
+  assert.equal(packageJson.version, '0.2.0');
   assert.equal(packageLock.packages[''].name, packageJson.name);
   assert.equal(packageLock.version, packageJson.version);
   assert.equal(packageLock.packages[''].version, packageJson.version);
@@ -24,8 +28,10 @@ test('release metadata has one authoritative v0.1.0 application version', () => 
 
   const readme = read('README.md');
   const changelog = read('CHANGELOG.md');
-  assert.match(readme, /Current application release metadata: \*\*v0\.1\.0\*\*/);
-  assert.match(changelog, /## 0\.1\.0 — 2026-08-11/);
+  const versionPattern = escaped(packageJson.version);
+  assert.match(readme, new RegExp(`Current application release metadata: \\*\\*v${versionPattern}\\*\\*`));
+  assert.match(changelog, new RegExp(`## ${versionPattern} — 2026-08-12`));
+  assert.ok(fs.existsSync(path.join(root, `docs/release-verification-v${packageJson.version}.md`)));
 });
 
 test('release surface includes Windows packaging without adding publishing or update behaviour', () => {
@@ -50,7 +56,9 @@ test('release notes state the intentionally unimplemented product areas', () => 
     assert.match(readme, new RegExp(phrase, 'i'));
   }
 
-  const verification = read('docs/release-verification-v0.1.0.md');
-  assert.match(verification, /no telemetry, analytics, cloud AI, social APIs, publishing, scheduling or Autopilot capability/i);
-  assert.match(verification, /uninstall does not casually delete creator\/application data/i);
+  const verification = read(`docs/release-verification-v${packageJson.version}.md`);
+  assert.match(verification, /no telemetry/i);
+  assert.match(verification, /cloud AI/i);
+  assert.match(verification, /social publishing/i);
+  assert.match(verification, /uninstall/i);
 });

@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0 — 2026-08-12
+
+### Added
+
+- A responsive local Media Library for browsing, filtering, sorting, selecting and inspecting managed creator media.
+- Local image thumbnails and video poster previews with bounded, rebuildable derived-cache storage and opaque renderer URLs.
+- A versioned local media metadata index with bounded search, filtering, sorting, pagination and deterministic rebuild/recovery.
+- Perceptual image/video similarity evidence that keeps SHA-256 exact identity separate from `highly-similar` and `related` results.
+- Optional local Ollama image/video understanding using compatible vision models, bounded image inputs and deterministic representative video frames.
+- User-authored tags, collections and saved views, plus explicit accept/dismiss flows for local-AI tag suggestions.
+- Media integrity inspection and exact-content recovery with explicit missing/changed/corrupt states and safe rebuild controls for derived systems.
+- Sway Forge application branding across the shell, About surface, fallback presentation, README and Windows packaging identity.
+
+### Security and privacy
+
+- Creator media, previews, index rows, similarity fingerprints and AI analysis remain local; no cloud media or cloud-AI fallback was added.
+- SHA-256 remains authoritative for exact media identity. Perceptual similarity is review evidence only and never authorises deletion or replacement.
+- User-authored tags and collections remain authoritative over AI-derived labels and descriptions.
+- Integrity/recovery uses trusted main-process file selection; renderer code does not gain arbitrary filesystem paths or generic file access.
+- Derived preview/index/similarity/AI data remains rebuildable and is never the sole copy of source media, projects or user organisation.
+- No telemetry, behavioural tracking, remote crash reporting or social-platform network path was introduced.
+
+### Quality and release integration
+
+- v0.2.0 release metadata is aligned across package metadata, lock metadata, About/runtime versioning, artifact naming, README and changelog.
+- Release regression coverage verifies the integrated Media Intelligence modules remain present behind the single application bootstrap and preserves existing packaging/privacy/security gates.
+- Existing feature-scale tests cover low-thousands media-index/similarity workloads and bounded renderer/progressive-work behaviour.
+
+### Known limitations
+
+- v0.2.0 uses managed-copy media. Referenced-source storage/relink is not yet implemented; `needs-relink` remains reserved for that future mode.
+- Video AI understanding samples representative frames rather than analysing every frame or audio.
+- Perceptual dHash similarity can miss major crops/overlays/structural edits and can over-score simple imagery, so it remains evidence rather than identity.
+- The local search read-model is a rebuildable JSON index for the current low-thousands target rather than a native SQLite/FTS dependency.
+- Hard managed-source deletion/library-record removal remains deliberately deferred until a safe archive/removal lifecycle exists.
+- Windows x64 remains the verified packaging target and the installer remains unsigned.
+- Ollama and a compatible local model are installed/configured separately; Sway Forge does not download models automatically.
+
+### Not included yet
+
+Content Studio editing/rendering, social account connection/OAuth, publishing or scheduling posts, trend collection/scoring, analytics/learning, campaigns and Autopilot remain outside v0.2.0.
+
 ## 0.1.0 — 2026-08-11
 
 ### Added
@@ -27,7 +69,7 @@
 
 - Windows x64 is the verified packaging target for v0.1.0.
 - The installer is unsigned and may trigger Windows reputation/SmartScreen warnings.
-- Ollama and an appropriate local model must be installed/configured separately for AI availability; SwayForge does not download models automatically.
+- Ollama and an appropriate local model must be installed/configured separately for AI availability; Sway Forge does not download models automatically.
 - v0.1.0 is an application foundation, not a complete social-media management product.
 
 ### Not included yet
