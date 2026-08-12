@@ -27,6 +27,11 @@ const MEDIA_IPC_CHANNELS = Object.freeze({
   preview: 'swayforge:media:preview',
   previewRebuild: 'swayforge:media:preview-rebuild'
 });
+const MEDIA_INDEX_IPC_CHANNELS = Object.freeze({
+  search: 'swayforge:media:index:search',
+  status: 'swayforge:media:index:status',
+  rebuild: 'swayforge:media:index:rebuild'
+});
 const SETTINGS_IPC_CHANNELS = Object.freeze({
   read: 'swayforge:settings:read',
   update: 'swayforge:settings:update',
@@ -45,6 +50,8 @@ const AI_STATUS_REQUEST = Object.freeze({ kind: 'ai-runtime-status', version: 1 
 const AI_REFRESH_REQUEST = Object.freeze({ kind: 'ai-runtime-refresh', version: 1 });
 const SECRET_STATUS_REQUEST = Object.freeze({ kind: 'secret-storage-status', version: 1 });
 const MEDIA_CHOOSE_REQUEST = Object.freeze({ kind: 'choose-media-import', version: 1 });
+const MEDIA_INDEX_STATUS_REQUEST = Object.freeze({ kind: 'media-index-status', version: 1 });
+const MEDIA_INDEX_REBUILD_REQUEST = Object.freeze({ kind: 'media-index-rebuild', version: 1 });
 const SETTINGS_READ_REQUEST = Object.freeze({ kind: 'settings-read', version: 1 });
 const SETTINGS_AI_MODELS_REQUEST = Object.freeze({ kind: 'settings-ai-models', version: 1 });
 const SETTINGS_STORAGE_INFO_REQUEST = Object.freeze({ kind: 'settings-storage-info', version: 1 });
@@ -62,6 +69,11 @@ function rejectedSettingsMutation() {
 
 function previewRequest(kind, mediaId) {
   return Object.freeze({ kind, version: 1, mediaId });
+}
+
+function mediaIndexSearchRequest(options) {
+  const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  return Object.freeze({ ...fields, kind: 'media-index-search', version: 1 });
 }
 
 const bridge = Object.freeze({
@@ -85,6 +97,9 @@ const bridge = Object.freeze({
   detachMediaFromProject: (request) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.detach, request),
   requestMediaPreview: (mediaId) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.preview, previewRequest('media-preview-request', mediaId)),
   rebuildMediaPreview: (mediaId) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.previewRebuild, previewRequest('media-preview-rebuild-request', mediaId)),
+  searchMedia: (options = {}) => ipcRenderer.invoke(MEDIA_INDEX_IPC_CHANNELS.search, mediaIndexSearchRequest(options)),
+  getMediaIndexStatus: () => ipcRenderer.invoke(MEDIA_INDEX_IPC_CHANNELS.status, MEDIA_INDEX_STATUS_REQUEST),
+  rebuildMediaIndex: () => ipcRenderer.invoke(MEDIA_INDEX_IPC_CHANNELS.rebuild, MEDIA_INDEX_REBUILD_REQUEST),
   getSettings: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.read, SETTINGS_READ_REQUEST),
   updateSettings: (request) => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.update, request),
   listAiModels: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.aiModels, SETTINGS_AI_MODELS_REQUEST),
