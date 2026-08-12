@@ -32,6 +32,11 @@ const MEDIA_INDEX_IPC_CHANNELS = Object.freeze({
   status: 'swayforge:media:index:status',
   rebuild: 'swayforge:media:index:rebuild'
 });
+const MEDIA_SIMILARITY_IPC_CHANNELS = Object.freeze({
+  find: 'swayforge:media:similarity:find',
+  status: 'swayforge:media:similarity:status',
+  rebuild: 'swayforge:media:similarity:rebuild'
+});
 const SETTINGS_IPC_CHANNELS = Object.freeze({
   read: 'swayforge:settings:read',
   update: 'swayforge:settings:update',
@@ -52,6 +57,8 @@ const SECRET_STATUS_REQUEST = Object.freeze({ kind: 'secret-storage-status', ver
 const MEDIA_CHOOSE_REQUEST = Object.freeze({ kind: 'choose-media-import', version: 1 });
 const MEDIA_INDEX_STATUS_REQUEST = Object.freeze({ kind: 'media-index-status', version: 1 });
 const MEDIA_INDEX_REBUILD_REQUEST = Object.freeze({ kind: 'media-index-rebuild', version: 1 });
+const MEDIA_SIMILARITY_STATUS_REQUEST = Object.freeze({ kind: 'media-similarity-status', version: 1 });
+const MEDIA_SIMILARITY_REBUILD_REQUEST = Object.freeze({ kind: 'media-similarity-rebuild', version: 1 });
 const SETTINGS_READ_REQUEST = Object.freeze({ kind: 'settings-read', version: 1 });
 const SETTINGS_AI_MODELS_REQUEST = Object.freeze({ kind: 'settings-ai-models', version: 1 });
 const SETTINGS_STORAGE_INFO_REQUEST = Object.freeze({ kind: 'settings-storage-info', version: 1 });
@@ -74,6 +81,11 @@ function previewRequest(kind, mediaId) {
 function mediaIndexSearchRequest(options) {
   const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   return Object.freeze({ ...fields, kind: 'media-index-search', version: 1 });
+}
+
+function mediaSimilarityFindRequest(mediaId, options) {
+  const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  return Object.freeze({ ...fields, kind: 'media-similarity-find', version: 1, mediaId });
 }
 
 const bridge = Object.freeze({
@@ -100,6 +112,9 @@ const bridge = Object.freeze({
   searchMedia: (options = {}) => ipcRenderer.invoke(MEDIA_INDEX_IPC_CHANNELS.search, mediaIndexSearchRequest(options)),
   getMediaIndexStatus: () => ipcRenderer.invoke(MEDIA_INDEX_IPC_CHANNELS.status, MEDIA_INDEX_STATUS_REQUEST),
   rebuildMediaIndex: () => ipcRenderer.invoke(MEDIA_INDEX_IPC_CHANNELS.rebuild, MEDIA_INDEX_REBUILD_REQUEST),
+  findSimilarMedia: (mediaId, options = {}) => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.find, mediaSimilarityFindRequest(mediaId, options)),
+  getMediaSimilarityStatus: () => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.status, MEDIA_SIMILARITY_STATUS_REQUEST),
+  rebuildMediaSimilarity: () => ipcRenderer.invoke(MEDIA_SIMILARITY_IPC_CHANNELS.rebuild, MEDIA_SIMILARITY_REBUILD_REQUEST),
   getSettings: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.read, SETTINGS_READ_REQUEST),
   updateSettings: (request) => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.update, request),
   listAiModels: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.aiModels, SETTINGS_AI_MODELS_REQUEST),

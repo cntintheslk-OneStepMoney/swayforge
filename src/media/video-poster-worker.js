@@ -22,10 +22,8 @@
     });
   }
 
-  root.swayForgeExtractVideoPoster = async function swayForgeExtractVideoPoster({ sourceUrl, maxDimension }) {
+  async function loadVideo(sourceUrl) {
     if (typeof sourceUrl !== 'string' || !sourceUrl.startsWith('file:')) throw new TypeError('sourceUrl must be a local file URL.');
-    if (!Number.isSafeInteger(maxDimension) || maxDimension < 64 || maxDimension > 2048) throw new TypeError('maxDimension is invalid.');
-
     const video = document.createElement('video');
     video.preload = 'auto';
     video.muted = true;
@@ -33,17 +31,49 @@
     video.src = sourceUrl;
     await waitFor(video, 'loadedmetadata');
     if (!video.videoWidth || !video.videoHeight) throw new Error('Video has no decodable dimensions.');
+    return video;
+  }
 
-    const durationSeconds = Number.isFinite(video.duration) ? video.duration : null;
-    const seekTarget = durationSeconds && durationSeconds > 0.2
-      ? Math.min(Math.max(durationSeconds * 0.1, 0.1), Math.max(0.1, durationSeconds - 0.1))
-      : 0;
-    if (seekTarget > 0) {
-      video.currentTime = seekTarget;
+  async function seekVideo(video, target) {
+    if (target > 0) {
+      video.currentTime = target;
       await waitFor(video, 'seeked');
     } else if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       await waitFor(video, 'loadeddata');
     }
+  }
+
+  function currentFrameDHash(video) {
+    const width = 9;
+    const height = 8;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+    if (!context) throw new Error('Video similarity canvas is unavailable.');
+    context.drawImage(video, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    let bits = '';
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width - 1; x += 1) {
+        const left = (y * width + x) * 4;
+        const right = left + 4;
+        const leftGray = (pixels[left] + pixels[left + 1] + pixels[left + 2]) / 3;
+        const rightGray = (pixels[right] + pixels[right + 1] + pixels[right + 2]) / 3;
+        bits += leftGray > rightGray ? '1' : '0';
+      }
+    }
+    return BigInt(`0b${bits}`).toString(16).padStart(16, '0');
+  }
+
+  root.swayForgeExtractVideoPoster = async function swayForgeExtractVideoPoster({ sourceUrl, maxDimension }) {
+    if (!Number.isSafeInteger(maxDimension) || maxDimension < 64 || maxDimension > 2048) throw new TypeError('maxDimension is invalid.');
+    const video = await loadVideo(sourceUrl);
+    const durationSeconds = Number.isFinite(video.duration) ? video.duration : null;
+    const seekTarget = durationSeconds && durationSeconds > 0.2
+      ? Math.min(Math.max(durationSeconds * 0.1, 0.1), Math.max(0.1, durationSeconds - 0.1))
+      : 0;
+    await seekVideo(video, seekTarget);
 
     const target = fitWithin(video.videoWidth, video.videoHeight, maxDimension);
     const canvas = document.createElement('canvas');
@@ -60,6 +90,34 @@
       width: target.width,
       height: target.height,
       durationSeconds
+    };
+  };
+
+  root.swayForgeExtractVideoPerceptualHashes = async function swayForgeExtractVideoPerceptualHashes({ sourceUrl, sampleFractions }) {
+    if (!Array.isArray(sampleFractions) || sampleFractions.length < 1 || sampleFractions.length > 5
+      || sampleFractions.some((value) => !Number.isFinite(value) || value < 0 || value > 1)) {
+      throw new TypeError('sampleFractions are invalid.');
+    }
+    const video = await loadVideo(sourceUrl);
+    const durationSeconds = Number.isFinite(video.duration) ? video.duration : null;
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    const hashes = [];
+    for (const fraction of sampleFractions) {
+      const target = durationSeconds && durationSeconds > 0.1
+        ? Math.min(Math.max(durationSeconds * fraction, 0.05), Math.max(0.05, durationSeconds - 0.05))
+        : 0;
+      await seekVideo(video, target);
+      hashes.push(currentFrameDHash(video));
+    }
+    video.removeAttribute('src');
+    video.load();
+    return {
+      hashes,
+      width: sourceWidth,
+      height: sourceHeight,
+      durationSeconds,
+      sampleFractions: [...sampleFractions]
     };
   };
 })(globalThis);
