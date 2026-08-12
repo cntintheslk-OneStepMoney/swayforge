@@ -7,6 +7,7 @@ const STATUS_VALUES = new Set(['Idea', 'Backlog', 'Planned', 'In Progress', 'Rev
 const PRIORITY_VALUES = new Set(['Critical', 'High', 'Medium', 'Low']);
 const COMPLEXITY_VALUES = new Set(['Small', 'Medium', 'Large']);
 const TYPE_VALUES = new Set(['Feature', 'Bug', 'UI/UX', 'Security', 'QOL', 'Maintenance']);
+const SYNC_KEYS = ['priority', 'complexity', 'status', 'type', 'targetRelease', 'area', 'branch', 'startDate', 'targetDate'];
 
 function parseArgs(argv) {
   const args = { dryRun: false, issue: null, config: null };
@@ -20,9 +21,13 @@ function parseArgs(argv) {
   return args;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function lineValue(body, labels) {
   for (const label of labels) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = escapeRegExp(label);
     const patterns = [
       new RegExp(`^\\s*[-*]\\s*\\*\\*${escaped}:\\*\\*\\s*(.+?)\\s*$`, 'im'),
       new RegExp(`^\\s*[-*]\\s*${escaped}:\\s*(.+?)\\s*$`, 'im'),
@@ -38,35 +43,45 @@ function lineValue(body, labels) {
 
 function cleanValue(value) {
   if (value == null) return null;
-  return value
+  const cleaned = value
     .replace(/`/g, '')
     .replace(/\*\*/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+  return cleaned === '—' || cleaned === '-' ? null : cleaned;
 }
 
 function inferRelease(title, body) {
+  if (/^\[Roadmap\]\[Index\]/i.test(title)) return null;
   const source = `${title}\n${body}`;
   const match = source.match(/\bv(\d+\.\d+\.\d+)\b/i);
   return match ? `v${match[1]}` : null;
 }
 
 function inferType(title, body) {
-  const titleMatch = title.match(/^\[(?:Work|Roadmap)\]\[([^\]]+)\]/i);
-  const raw = titleMatch ? titleMatch[1] : lineValue(body, ['Planned type', 'Type']);
-  if (!raw) return null;
-  const canonical = [...TYPE_VALUES].find((value) => value.toLowerCase() === raw.toLowerCase());
-  return canonical || null;
+  const workMatch = title.match(/^\[Work\]\[([^\]]+)\]/i);
+  if (workMatch) {
+    return [...TYPE_VALUES].find((value) => value.toLowerCase() === workMatch[1].toLowerCase()) || null;
+  }
+  if (/^\[Roadmap\]\[Design Brief\]/i.test(title)) {
+    const raw = lineValue(body, ['Planned type', 'Type']);
+    return raw ? [...TYPE_VALUES].find((value) => value.toLowerCase() === raw.toLowerCase()) || null : null;
+  }
+  if (/^\[Roadmap\]\[(?:Umbrella|Index)\]/i.test(title)) return null;
+  const raw = lineValue(body, ['Planned type', 'Type']);
+  return raw ? [...TYPE_VALUES].find((value) => value.toLowerCase() === raw.toLowerCase()) || null : null;
 }
 
 function inferStatus(issue, body) {
+  if (issue.state === 'closed' && issue.state_reason !== 'not_planned') return 'Done';
+  if (issue.state === 'closed' && issue.state_reason === 'not_planned') return 'Backlog';
   const explicit = lineValue(body, ['Status']);
   if (explicit && STATUS_VALUES.has(explicit)) return explicit;
-  if (issue.state === 'closed') return 'Done';
   if (/\bDraft PR\b|\bReview Date\b|\bStatus:\s*Review\b/i.test(body)) return 'Review';
   if (/\bStatus:\s*In Progress\b/i.test(body)) return 'In Progress';
   if (/^\[Roadmap\]\[(?:Design Brief|Umbrella)\]/i.test(issue.title)) return 'Planned';
   if (/^\[Report\]\[Bug\]\[Unscheduled\]/i.test(issue.title)) return 'Backlog';
+  if (/^\[Idea\]/i.test(issue.title)) return 'Idea';
   return 'Backlog';
 }
 
@@ -97,12 +112,58 @@ function inferMetadata(issue) {
     area: lineValue(body, ['Area']),
     branch: inferBranch(body, status),
     startDate: inferStartDate(body, status),
-    targetDate: inferTargetDate(body)
+    targetDate: inferTargetDate(body),
+    authoritativeKeys: ['status']
   };
 
   if (metadata.priority && !PRIORITY_VALUES.has(metadata.priority)) metadata.priority = null;
   if (metadata.complexity && !COMPLEXITY_VALUES.has(metadata.complexity)) metadata.complexity = null;
+  if (!['In Progress', 'Review', 'Done'].includes(status)) {
+    metadata.authoritativeKeys.push('branch', 'startDate');
+  }
   return metadata;
+}
+
+function parseIndexRows(body) {
+  const rows = new Map();
+  for (const line of body.split(/\r?\n/)) {
+    if (!line.trim().startsWith('|')) continue;
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (cells.length < 10) continue;
+    if (/^---/.test(cells[0])) continue;
+    const issueMatch = cells[2].match(/#(\d+)\b/);
+    if (!issueMatch) continue;
+    const issueNumber = Number(issueMatch[1]);
+    const metadata = {
+      issueNumber,
+      priority: cleanValue(cells[0]),
+      complexity: cleanValue(cells[1]),
+      status: cleanValue(cells[3]),
+      type: cleanValue(cells[4]),
+      targetRelease: cleanValue(cells[5]),
+      area: cleanValue(cells[6]),
+      branch: cleanValue(cells[7]),
+      startDate: cleanValue(cells[8]),
+      targetDate: cleanValue(cells[9]),
+      authoritativeKeys: [...SYNC_KEYS]
+    };
+    if (metadata.status && !STATUS_VALUES.has(metadata.status)) continue;
+    rows.set(issueNumber, metadata);
+  }
+  return rows;
+}
+
+function mergeMetadata(issue, issueMetadata, indexMetadata) {
+  if (!indexMetadata) return issueMetadata;
+  const merged = { ...issueMetadata, ...indexMetadata, issueNumber: issue.number };
+  if (issue.state === 'closed' && issue.state_reason !== 'not_planned') merged.status = 'Done';
+  if (issue.state === 'closed' && issue.state_reason === 'not_planned') merged.status = 'Backlog';
+  if (!['In Progress', 'Review', 'Done'].includes(merged.status)) {
+    merged.branch = null;
+    merged.startDate = null;
+  }
+  merged.authoritativeKeys = [...new Set([...(issueMetadata.authoritativeKeys || []), ...(indexMetadata.authoritativeKeys || [])])];
+  return merged;
 }
 
 function loadConfig(path) {
@@ -135,6 +196,7 @@ function validateConfig(config) {
   if (!Number.isInteger(Number(config.projectNumber)) || Number(config.projectNumber) <= 0) {
     throw new Error('SWAYFORGE_PROJECT_NUMBER/projectNumber must be a positive integer.');
   }
+  if (!config.fieldNames) throw new Error('fieldNames configuration is required.');
 }
 
 function authHeaders(token) {
@@ -171,28 +233,21 @@ function projectBase(config) {
 
 async function paginate(url, token) {
   const results = [];
-  let after = null;
-  do {
-    const target = new URL(url);
-    target.searchParams.set('per_page', '100');
-    if (after) target.searchParams.set('after', after);
-    const response = await fetch(target, { headers: authHeaders(token) });
+  let nextUrl = new URL(url);
+  nextUrl.searchParams.set('per_page', '100');
+  while (nextUrl) {
+    const response = await fetch(nextUrl, { headers: authHeaders(token) });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`GET ${target} failed (${response.status}): ${text.slice(0, 500)}`);
+      throw new Error(`GET ${nextUrl} failed (${response.status}): ${text.slice(0, 500)}`);
     }
     const payload = await response.json();
-    if (!Array.isArray(payload)) throw new Error(`Expected array from ${target}`);
+    if (!Array.isArray(payload)) throw new Error(`Expected array from ${nextUrl}`);
     results.push(...payload);
     const link = response.headers.get('link') || '';
     const next = link.match(/<([^>]+)>;\s*rel="next"/);
-    if (next) {
-      const nextUrl = new URL(next[1]);
-      after = nextUrl.searchParams.get('after');
-    } else {
-      after = null;
-    }
-  } while (after);
+    nextUrl = next ? new URL(next[1]) : null;
+  }
   return results;
 }
 
@@ -208,7 +263,7 @@ async function listRepoIssues(repository, token, issueNumber) {
     url.searchParams.set('per_page', '100');
     url.searchParams.set('page', String(page));
     const payload = await request(url, { token });
-    const issues = payload.filter((issue) => !issue.pull_request);
+    const issues = payload.filter((issue) => !issue.pull_request && issue.number !== 1);
     results.push(...issues);
     if (payload.length < 100) break;
     page += 1;
@@ -227,9 +282,9 @@ function optionId(field, desired) {
 }
 
 function fieldUpdate(field, value) {
-  if (value == null || value === '') return null;
+  if (value == null) return { id: field.id, value: null };
   if (field.data_type === 'single_select') return { id: field.id, value: optionId(field, value) };
-  if (field.data_type === 'date') return { id: field.id, value };
+  if (field.data_type === 'date') return { id: field.id, value: String(value) };
   if (field.data_type === 'number') return { id: field.id, value: Number(value) };
   return { id: field.id, value: String(value) };
 }
@@ -246,14 +301,14 @@ function buildUpdates(metadata, fieldsByName, config) {
     startDate: metadata.startDate,
     targetDate: metadata.targetDate
   };
+  const authoritative = new Set(metadata.authoritativeKeys || []);
   const updates = [];
   for (const [key, value] of Object.entries(mapping)) {
-    if (value == null || value === '') continue;
+    if ((value == null || value === '') && !authoritative.has(key)) continue;
     const fieldName = config.fieldNames[key];
     const field = fieldsByName.get(fieldName);
     if (!field) throw new Error(`Required Project field is missing: ${fieldName}`);
-    const update = fieldUpdate(field, value);
-    if (update) updates.push(update);
+    updates.push(fieldUpdate(field, value));
   }
   return updates;
 }
@@ -278,15 +333,17 @@ async function reconcile({ repository, token, config, issueNumber = null, dryRun
   const fields = await paginate(`${projectBase(config)}/fields`, token);
   const fieldsByName = new Map(fields.map((field) => [field.name, field]));
   const items = await paginate(`${projectBase(config)}/items`, token);
+  const indexIssue = await request(`https://api.github.com/repos/${repository}/issues/1`, { token });
+  const indexRows = parseIndexRows(indexIssue.body || '');
   const issues = await listRepoIssues(repository, token, issueNumber);
   const audit = [];
 
   for (const issue of issues) {
-    const metadata = inferMetadata(issue);
+    const metadata = mergeMetadata(issue, inferMetadata(issue), indexRows.get(issue.number));
     const item = await ensureItem(issue, items, config, token, dryRun);
     const updates = buildUpdates(metadata, fieldsByName, config);
 
-    audit.push({ issue: issue.number, title: issue.title, metadata, updates, itemId: item.id, dryRun });
+    audit.push({ issue: issue.number, title: issue.title, metadata: { ...metadata, authoritativeKeys: metadata.authoritativeKeys }, updates, itemId: item.id, dryRun });
     if (!dryRun && updates.length > 0) {
       await request(`${projectBase(config)}/items/${item.id}`, {
         token,
@@ -323,6 +380,7 @@ if (require.main === module) {
 
 module.exports = {
   STATUS_VALUES,
+  SYNC_KEYS,
   inferMetadata,
   inferStatus,
   inferRelease,
@@ -330,6 +388,8 @@ module.exports = {
   inferBranch,
   inferStartDate,
   inferTargetDate,
+  parseIndexRows,
+  mergeMetadata,
   lineValue,
   cleanValue,
   buildUpdates,
