@@ -9,7 +9,10 @@
     >
     <title>SwayForge</title>
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./media-library.css">
     <script src="./navigation-model.js" defer></script>
+    <script src="./media-library-model.js" defer></script>
+    <script src="./media-library.js" defer></script>
     <script src="./renderer-app.js" defer></script>
   </head>
   <body>
@@ -119,19 +122,94 @@
         <section id="view-media" class="view" data-view="media" aria-labelledby="page-heading" hidden>
           <div class="section-heading">
             <div>
+              <p class="eyebrow">Local Media Library</p>
               <h3>Managed media</h3>
-              <p>Imported media remains a separate managed copy; source files are never modified by this view.</p>
+              <p>Browse and select verified local media records. Source files remain untouched and previews stay local.</p>
             </div>
             <div class="button-group">
               <button id="reload-media" class="button button--secondary" type="button">Reload</button>
               <button id="import-media" class="button button--primary" type="button">Import media</button>
             </div>
           </div>
-          <div id="media-state" class="empty-state" role="status">
-            <strong>Loading media…</strong>
-            <span>Reading local media summaries.</span>
+
+          <div class="media-library-toolbar" aria-label="Media Library view and filters">
+            <div class="media-library-toolbar__group">
+              <span class="media-library-field">View</span>
+              <div class="segmented-control" role="group" aria-label="Media layout">
+                <button id="media-view-grid" class="button button--secondary" type="button" aria-pressed="true">Grid</button>
+                <button id="media-view-list" class="button button--secondary" type="button" aria-pressed="false">List</button>
+              </div>
+            </div>
+
+            <label class="media-library-field" for="media-kind-filter">
+              Kind
+              <select id="media-kind-filter">
+                <option value="all">All media</option>
+                <option value="image">Images</option>
+                <option value="video">Videos</option>
+              </select>
+            </label>
+
+            <label class="media-library-field" for="media-state-filter">
+              Availability
+              <select id="media-state-filter">
+                <option value="all">All states</option>
+                <option value="ready">Ready</option>
+                <option value="missing">Missing</option>
+                <option value="corrupt">Corrupt</option>
+                <option value="unsupported">Unsupported</option>
+                <option value="needs-relink">Needs relink</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </label>
+
+            <label class="media-library-field" for="media-sort">
+              Sort
+              <select id="media-sort">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="name">Name</option>
+                <option value="type">Media type</option>
+                <option value="duration-longest">Longest duration</option>
+                <option value="duration-shortest">Shortest duration</option>
+              </select>
+            </label>
+
+            <button id="media-clear-filters" class="button button--quiet" type="button">Clear filters</button>
           </div>
-          <div id="media-list" class="card-list" aria-live="polite"></div>
+
+          <div class="media-selection-bar">
+            <div class="media-selection-bar__summary">
+              <strong id="media-selected-count" aria-live="polite">0 selected</strong>
+              <button id="media-clear-selection" class="button button--secondary" type="button" disabled>Clear selection</button>
+            </div>
+            <button class="button button--secondary" type="button" disabled aria-disabled="true" title="Batch organisation arrives in a later Media Intelligence workstream">Batch actions later</button>
+          </div>
+
+          <div class="media-library-workspace">
+            <div class="media-library-results">
+              <div id="media-state" class="empty-state" role="status">
+                <strong>Loading media…</strong>
+                <span>Reading local media summaries.</span>
+              </div>
+              <ul id="media-library-items" class="media-library-items" data-layout="grid" aria-live="polite" aria-label="Local media items"></ul>
+              <div class="media-pagination">
+                <p id="media-result-summary" role="status">Loading local media…</p>
+                <button id="media-load-more" class="button button--secondary" type="button" hidden>Show more</button>
+              </div>
+            </div>
+
+            <aside id="media-details" class="media-details" aria-labelledby="media-details-title" hidden>
+              <div class="media-details__header">
+                <div>
+                  <p class="eyebrow">Media details</p>
+                  <h3 id="media-details-title">Media item</h3>
+                </div>
+                <button id="media-details-close" class="button button--quiet" type="button">Close</button>
+              </div>
+              <dl id="media-details-body" class="media-details__list"></dl>
+            </aside>
+          </div>
         </section>
 
         <section id="view-settings" class="view" data-view="settings" aria-labelledby="page-heading" hidden>

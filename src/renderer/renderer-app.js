@@ -11,11 +11,10 @@ const aiStatusElement = document.querySelector('#ai-status');
 const secretStatusElement = document.querySelector('#secret-status');
 const projectStateElement = document.querySelector('#projects-state');
 const projectListElement = document.querySelector('#project-list');
-const mediaStateElement = document.querySelector('#media-state');
-const mediaListElement = document.querySelector('#media-list');
 const navigationButtons = Array.from(document.querySelectorAll('[data-route]'));
 const views = Array.from(document.querySelectorAll('[data-view]'));
 const navigation = globalThis.SwayForgeNavigation;
+const mediaLibraryUi = globalThis.SwayForgeMediaLibrary;
 
 const AI_STATUS_LABELS = Object.freeze({
   unavailable: 'Ollama unavailable',
@@ -30,6 +29,7 @@ const AI_STATUS_LABELS = Object.freeze({
 let currentRouteKey = 'home';
 let booted = false;
 let loadToken = 0;
+let mediaLibrary = null;
 
 function setText(element, value, fallback = 'Unknown') {
   element.textContent = typeof value === 'string' || typeof value === 'number' ? String(value) : fallback;
@@ -95,37 +95,6 @@ function renderProjectList(projects) {
   }
 }
 
-function mediaDescription(media) {
-  const kind = media?.kind === 'video' ? 'Video' : media?.kind === 'image' ? 'Image' : 'Media';
-  const dimensions = Number.isInteger(media?.width) && Number.isInteger(media?.height)
-    ? ` · ${media.width}×${media.height}`
-    : '';
-  return `${kind}${dimensions} · Managed local copy`;
-}
-
-function renderMediaList(mediaItems) {
-  mediaListElement.replaceChildren();
-  const safeMediaItems = Array.isArray(mediaItems) ? mediaItems : [];
-  mediaStateElement.hidden = safeMediaItems.length > 0;
-  if (safeMediaItems.length === 0) {
-    mediaStateElement.replaceChildren();
-    const title = document.createElement('strong');
-    const body = document.createElement('span');
-    title.textContent = 'No managed media yet';
-    body.textContent = 'Import supported creator-owned media to create a verified managed copy.';
-    mediaStateElement.append(title, body);
-    return;
-  }
-
-  for (const media of safeMediaItems) {
-    mediaListElement.append(createCard({
-      title: typeof media?.originalFilename === 'string' ? media.originalFilename : 'Unnamed media',
-      description: mediaDescription(media),
-      meta: formatDate(media?.importedAt)
-    }));
-  }
-}
-
 async function loadProjects(bridge, token = loadToken) {
   projectStateElement.hidden = false;
   setText(projectStateElement.querySelector('strong'), 'Loading projects…');
@@ -148,22 +117,15 @@ async function loadProjects(bridge, token = loadToken) {
 }
 
 async function loadMedia(bridge, token = loadToken) {
-  mediaStateElement.hidden = false;
-  setText(mediaStateElement.querySelector('strong'), 'Loading media…');
+  mediaLibrary.setLoading();
   try {
-    const mediaItems = unwrapResult(await bridge.listMedia(), 'Managed media could not be read.');
+    const mediaPayload = unwrapResult(await bridge.listMedia(), 'Managed media could not be read.');
     if (token !== loadToken) return;
-    renderMediaList(mediaItems);
-    setText(mediaCountElement, Array.isArray(mediaItems) ? mediaItems.length : 0);
+    const mediaItems = mediaLibrary.setItems(mediaPayload);
+    setText(mediaCountElement, mediaItems.length);
   } catch (error) {
-    mediaListElement.replaceChildren();
-    mediaStateElement.hidden = false;
-    mediaStateElement.replaceChildren();
-    const title = document.createElement('strong');
-    const body = document.createElement('span');
-    title.textContent = 'Media unavailable';
-    body.textContent = error.message;
-    mediaStateElement.append(title, body);
+    if (token !== loadToken) return;
+    mediaLibrary.setError(error.message);
     setText(mediaCountElement, 'Unavailable');
   }
 }
@@ -278,11 +240,12 @@ async function bootRenderer() {
   if (booted) return;
   booted = true;
   const bridge = window.swayForge;
-  if (!navigation || !validBridge(bridge)) {
+  if (!navigation || !mediaLibraryUi || !validBridge(bridge)) {
     showGlobalError('The secure application bridge is unavailable. Restart SwayForge.');
     return;
   }
 
+  mediaLibrary = mediaLibraryUi.createMediaLibrary({ rootElement: document.querySelector('#view-media') });
   registerNavigationHandlers(bridge);
   registerActionHandlers(bridge);
   updateNavigationSelection(currentRouteKey);
