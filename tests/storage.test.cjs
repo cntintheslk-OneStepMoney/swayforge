@@ -221,8 +221,9 @@ test('migration runner advances schema zero deterministically and is not repeate
     }
   };
   const migrated = runMigrations(legacy);
-  assert.deepEqual(migrated.applied, ['0->1']);
-  assert.equal(migrated.document.schemaVersion, 1);
+  assert.deepEqual(migrated.applied, ['0->1', '1->2']);
+  assert.equal(migrated.document.schemaVersion, CURRENT_SCHEMA_VERSION);
+  assert.equal(migrated.document.mediaOrganisation.schemaVersion, 1);
 
   await fsp.writeFile(path.join(root, 'workspace.json'), `${JSON.stringify(legacy)}\n`, 'utf8');
   const repository = await openRepository(root);
@@ -251,7 +252,7 @@ test('storage IPC surface is named and does not expose filesystem/query primitiv
     assert.match(preload, new RegExp(`${capability}:`));
   }
   assert.doesNotMatch(preload, /readFile|writeFile|query\s*:|execute\s*:|filesystem|rootDirectory/);
-  const main = fs.readFileSync(path.join(__dirname, '..', 'src/main/main-process.cjs'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main-process.cjs'), 'utf8');
   assert.match(main, /app\.getPath\('userData'\)/);
   assert.doesNotMatch(main, /ipcMain\.handle\([^\n]*=>\s*fs\./);
 });
