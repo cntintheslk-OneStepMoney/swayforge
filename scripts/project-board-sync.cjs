@@ -208,7 +208,15 @@ function authHeaders(token) {
   };
 }
 
-async function request(url, { token, method = 'GET', body } = {}) {
+function redactSensitive(text, sensitiveValues = []) {
+  let result = String(text || '');
+  for (const value of sensitiveValues) {
+    if (value && typeof value === 'string') result = result.split(value).join('[REDACTED]');
+  }
+  return result;
+}
+
+async function request(url, { token, method = 'GET', body, sensitiveValues = [] } = {}) {
   const response = await fetch(url, {
     method,
     headers: {
@@ -219,7 +227,7 @@ async function request(url, { token, method = 'GET', body } = {}) {
   });
 
   if (!response.ok) {
-    const text = await response.text();
+    const text = redactSensitive(await response.text(), [token, ...sensitiveValues]);
     throw new Error(`${method} ${url} failed (${response.status}): ${text.slice(0, 500)}`);
   }
   if (response.status === 204) return null;
@@ -238,7 +246,7 @@ async function paginate(url, token) {
   while (nextUrl) {
     const response = await fetch(nextUrl, { headers: authHeaders(token) });
     if (!response.ok) {
-      const text = await response.text();
+      const text = redactSensitive(await response.text(), [token]);
       throw new Error(`GET ${nextUrl} failed (${response.status}): ${text.slice(0, 500)}`);
     }
     const payload = await response.json();
@@ -251,9 +259,9 @@ async function paginate(url, token) {
   return results;
 }
 
-async function listRepoIssues(repository, token, issueNumber) {
+async function listRepoIssues(repository, repoToken, issueNumber) {
   if (issueNumber) {
-    return [await request(`https://api.github.com/repos/${repository}/issues/${issueNumber}`, { token })];
+    return [await request(`https://api.github.com/repos/${repository}/issues/${issueNumber}`, { token: repoToken })];
   }
   const results = [];
   let page = 1;
@@ -262,7 +270,7 @@ async function listRepoIssues(repository, token, issueNumber) {
     url.searchParams.set('state', 'all');
     url.searchParams.set('per_page', '100');
     url.searchParams.set('page', String(page));
-    const payload = await request(url, { token });
+    const payload = await request(url, { token: repoToken });
     const issues = payload.filter((issue) => !issue.pull_request && issue.number !== 1);
     results.push(...issues);
     if (payload.length < 100) break;
@@ -313,40 +321,49 @@ function buildUpdates(metadata, fieldsByName, config) {
   return updates;
 }
 
-async function ensureItem(issue, items, config, token, dryRun) {
+async function ensureItem(issue, items, config, projectToken, dryRun) {
   const existing = items.find((item) => item.content?.node_id === issue.node_id || item.content?.id === issue.id);
   if (existing) return existing;
   if (dryRun) return { id: null, content: issue, dryRunNewItem: true };
   const created = await request(`${projectBase(config)}/items`, {
-    token,
+    token: projectToken,
     method: 'POST',
     body: { type: 'Issue', id: issue.id }
   });
   return created.value || created;
 }
 
-async function reconcile({ repository, token, config, issueNumber = null, dryRun = false }) {
+async function reconcile({ repository, projectToken, repoToken, config, issueNumber = null, dryRun = false }) {
   validateConfig(config);
-  if (!token) throw new Error('SWAYFORGE_PROJECT_TOKEN is required.');
+  if (!projectToken) throw new Error('SWAYFORGE_PROJECT_TOKEN is required.');
+  if (!repoToken) throw new Error('GITHUB_TOKEN is required for repository Issue reads.');
 
-  await request(projectBase(config), { token });
-  const fields = await paginate(`${projectBase(config)}/fields`, token);
+  await request(projectBase(config), { token: projectToken });
+  const fields = await paginate(`${projectBase(config)}/fields`, projectToken);
   const fieldsByName = new Map(fields.map((field) => [field.name, field]));
-  const items = await paginate(`${projectBase(config)}/items`, token);
-  const indexIssue = await request(`https://api.github.com/repos/${repository}/issues/1`, { token });
+  const items = await paginate(`${projectBase(config)}/items`, projectToken);
+  const indexIssue = await request(`https://api.github.com/repos/${repository}/issues/1`, { token: repoToken });
   const indexRows = parseIndexRows(indexIssue.body || '');
-  const issues = await listRepoIssues(repository, token, issueNumber);
+  const issues = await listRepoIssues(repository, repoToken, issueNumber);
   const audit = [];
 
   for (const issue of issues) {
     const metadata = mergeMetadata(issue, inferMetadata(issue), indexRows.get(issue.number));
-    const item = await ensureItem(issue, items, config, token, dryRun);
+    const item = await ensureItem(issue, items, config, projectToken, dryRun);
     const updates = buildUpdates(metadata, fieldsByName, config);
 
-    audit.push({ issue: issue.number, title: issue.title, metadata: { ...metadata, authoritativeKeys: metadata.authoritativeKeys }, updates, itemId: item.id, dryRun });
+    audit.push({
+      issue: issue.number,
+      title: issue.title,
+      metadata: { ...metadata, authoritativeKeys: metadata.authoritativeKeys },
+      updates,
+      itemId: item.id,
+      dryRun
+    });
+
     if (!dryRun && updates.length > 0) {
       await request(`${projectBase(config)}/items/${item.id}`, {
-        token,
+        token: projectToken,
         method: 'PATCH',
         body: { fields: updates }
       });
@@ -363,7 +380,8 @@ async function main() {
 
   const audit = await reconcile({
     repository,
-    token: process.env.SWAYFORGE_PROJECT_TOKEN,
+    projectToken: process.env.SWAYFORGE_PROJECT_TOKEN,
+    repoToken: process.env.GITHUB_TOKEN,
     config,
     issueNumber: args.issue,
     dryRun: args.dryRun
@@ -396,5 +414,6 @@ module.exports = {
   fieldUpdate,
   validateConfig,
   projectBase,
+  redactSensitive,
   reconcile
 };
