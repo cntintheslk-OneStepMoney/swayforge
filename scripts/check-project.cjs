@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const REQUIRED_FILES = Object.freeze([
   'package.json',
+  'src/main/application-bootstrap.cjs',
   'src/main/preview-bootstrap.cjs',
   'src/main/main-process.cjs',
   'src/preload/preload-bridge.cjs',
@@ -119,7 +120,7 @@ function checkProject(root = process.cwd()) {
   const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
   if (packageJson.name !== 'swayforge') throw new Error('package.json name must be swayforge.');
-  if (packageJson.main !== 'src/main/preview-bootstrap.cjs') throw new Error('Unexpected Electron main entry.');
+  if (packageJson.main !== 'src/main/application-bootstrap.cjs') throw new Error('Unexpected Electron main entry.');
 
   for (const scriptName of ['start', 'test', 'check', 'lint']) {
     if (typeof packageJson.scripts?.[scriptName] !== 'string') {

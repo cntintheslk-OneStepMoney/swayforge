@@ -13,10 +13,12 @@ const {
 const root = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
-test('Electron enters through preview bootstrap and registers scheme before foundation main loads', () => {
+test('Electron composes preview bootstrap before integrity extension and registers scheme before foundation main loads', () => {
   const packageJson = JSON.parse(read('package.json'));
+  const composition = read(packageJson.main);
   const source = read('src/main/preview-bootstrap.cjs');
-  assert.equal(packageJson.main, 'src/main/preview-bootstrap.cjs');
+  assert.equal(packageJson.main, 'src/main/application-bootstrap.cjs');
+  assert.ok(composition.indexOf("require('./preview-bootstrap.cjs')") < composition.indexOf("require('./integrity-bootstrap.cjs')"));
   assert.ok(source.indexOf('registerMediaPreviewScheme(protocol)') < source.indexOf("require('./main-process.cjs')"));
   assert.match(source, /app\.getPath\('userData'\).*CACHE_DIRECTORY_NAME/s);
   assert.match(source, /MEDIA_PREVIEW_GENERATOR_VERSION = 'electron-native-preview-v1'/);
