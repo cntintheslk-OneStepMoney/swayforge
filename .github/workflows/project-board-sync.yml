@@ -19,6 +19,11 @@ on:
 
 permissions:
   contents: read
+  issues: read
+
+concurrency:
+  group: project-board-sync
+  cancel-in-progress: true
 
 jobs:
   sync:
@@ -54,19 +59,17 @@ jobs:
         shell: bash
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
           SWAYFORGE_PROJECT_OWNER: ${{ vars.SWAYFORGE_PROJECT_OWNER }}
           SWAYFORGE_PROJECT_OWNER_TYPE: ${{ vars.SWAYFORGE_PROJECT_OWNER_TYPE }}
           SWAYFORGE_PROJECT_NUMBER: ${{ vars.SWAYFORGE_PROJECT_NUMBER }}
           SWAYFORGE_PROJECT_TOKEN: ${{ secrets.SWAYFORGE_PROJECT_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
           INPUT_ISSUE_NUMBER: ${{ inputs.issue_number }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           args=()
-          if [[ "$EVENT_NAME" == "issues" && -n "$EVENT_ISSUE_NUMBER" ]]; then
-            args+=(--issue "$EVENT_ISSUE_NUMBER")
-          elif [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_ISSUE_NUMBER" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_ISSUE_NUMBER" ]]; then
             args+=(--issue "$INPUT_ISSUE_NUMBER")
           fi
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$INPUT_DRY_RUN" == "true" ]]; then
