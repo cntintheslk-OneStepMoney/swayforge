@@ -5,14 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
     >
-    <title>SwayForge startup problem</title>
+    <title>Sway Forge startup problem</title>
     <link rel="stylesheet" href="./fallback.css">
   </head>
   <body>
     <main>
-      <h1>SwayForge could not load its interface.</h1>
+      <div class="fallback-brand" aria-label="Sway Forge">
+        <img src="./brand/sway-forge-mark.svg" alt="" aria-hidden="true">
+        <div>
+          <strong>Sway Forge</strong>
+          <span>Create smarter. Stay in control.</span>
+        </div>
+      </div>
+      <h1>Sway Forge could not load its interface.</h1>
       <p>No social account, private media, AI service, or publishing action was accessed. Close and restart the application.</p>
     </main>
   </body>

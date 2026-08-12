@@ -159,7 +159,7 @@ test('minimal renderer has semantic landmarks and does not claim future features
   const html = read('src/renderer/index.html');
   assert.match(html, /<header\b/);
   assert.match(html, /<main\b/);
-  assert.match(html, /<h1>SwayForge<\/h1>/);
+  assert.match(html, /<h1>Sway Forge<\/h1>/);
   assert.match(html, /intentionally not enabled yet/);
   assert.match(html, /Local AI/);
   assert.match(html, /No telemetry/);

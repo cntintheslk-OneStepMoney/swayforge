@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <!-- Original SwayForge development icon; refreshed as the Issue #126 compact brand derivative. -->
-  <title id="title">Sway Forge application icon</title>
-  <desc id="desc">Navy S F monogram with an orange accent.</desc>
+  <title id="title">Sway Forge mark</title>
+  <desc id="desc">A compact navy S F monogram with a restrained orange accent.</desc>
   <rect x="3" y="3" width="58" height="58" rx="15" fill="#102a43"/>
   <path d="M28 19.5c-2.2-2-5-3-8.1-3-5.1 0-8.4 2.8-8.4 6.7 0 10 17.5 5 17.5 15.5 0 4.9-4 8.8-10.1 8.8-3.8 0-7.3-1.2-10-3.6" fill="none" stroke="#f4f7fb" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M32.5 16.5h17M34.5 16.5v31M34.5 31.5H47" fill="none" stroke="#f4f7fb" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>

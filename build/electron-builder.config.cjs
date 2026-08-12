@@ -35,6 +35,8 @@ module.exports = {
     createStartMenuShortcut: true,
     shortcutName: 'SwayForge',
     uninstallDisplayName: 'SwayForge',
+    installerIcon: 'build/icon.ico',
+    uninstallerIcon: 'build/icon.ico',
     deleteAppDataOnUninstall: false,
     artifactName: '${productName}-${version}-win-${arch}-setup.${ext}'
   }
