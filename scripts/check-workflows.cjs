@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const QUALITY_WORKFLOW = '.github/workflows/quality.yml';
+const PROJECT_SYNC_WORKFLOW = '.github/workflows/project-board-sync.yml';
+const PROJECT_SYNC_SECRET = 'SWAYFORGE_PROJECT_TOKEN';
 
 function readWorkflowFiles(root) {
   const workflowDirectory = path.join(root, '.github', 'workflows');
@@ -13,6 +15,10 @@ function readWorkflowFiles(root) {
       relativePath: `.github/workflows/${entry.name}`,
       source: fs.readFileSync(path.join(workflowDirectory, entry.name), 'utf8')
     }));
+}
+
+function secretReferences(source) {
+  return [...source.matchAll(/\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}/g)].map((match) => match[1]);
 }
 
 function assertWorkflowPolicy(root = process.cwd()) {
@@ -29,8 +35,13 @@ function assertWorkflowPolicy(root = process.cwd()) {
     if (/pull_request_target\s*:/m.test(workflow.source)) {
       violations.push(`${workflow.relativePath} (pull_request_target is not allowed)`);
     }
-    if (/\$\{\{\s*secrets\./.test(workflow.source)) {
-      violations.push(`${workflow.relativePath} (production/user secrets are not allowed)`);
+
+    const secrets = secretReferences(workflow.source);
+    for (const secret of secrets) {
+      const allowedProjectSecret = workflow.relativePath === PROJECT_SYNC_WORKFLOW && secret === PROJECT_SYNC_SECRET;
+      if (!allowedProjectSecret) {
+        violations.push(`${workflow.relativePath} (Actions secret ${secret} is not allowlisted)`);
+      }
     }
   }
 
@@ -65,6 +76,34 @@ function assertWorkflowPolicy(root = process.cwd()) {
     }
   }
 
+  const projectSync = workflows.find((workflow) => workflow.relativePath === PROJECT_SYNC_WORKFLOW);
+  if (!projectSync) {
+    violations.push(`${PROJECT_SYNC_WORKFLOW} (missing)`);
+  } else {
+    const requiredMarkers = [
+      'workflow_dispatch:',
+      'issues:',
+      'schedule:',
+      'permissions:',
+      'contents: read',
+      'actions/checkout@v6',
+      'github.event.repository.default_branch',
+      `secrets.${PROJECT_SYNC_SECRET}`,
+      'vars.SWAYFORGE_PROJECT_OWNER',
+      'vars.SWAYFORGE_PROJECT_NUMBER',
+      'scripts/project-board-sync.cjs'
+    ];
+    for (const marker of requiredMarkers) {
+      if (!projectSync.source.includes(marker)) violations.push(`${PROJECT_SYNC_WORKFLOW} (missing ${marker})`);
+    }
+    if (/^\s*pull_request\s*:/m.test(projectSync.source) || /pull_request_target\s*:/m.test(projectSync.source)) {
+      violations.push(`${PROJECT_SYNC_WORKFLOW} (must not expose Project credentials to PR-triggered execution)`);
+    }
+    if (secretReferences(projectSync.source).some((secret) => secret !== PROJECT_SYNC_SECRET)) {
+      violations.push(`${PROJECT_SYNC_WORKFLOW} (contains a non-Project secret reference)`);
+    }
+  }
+
   if (violations.length > 0) throw new Error(`Workflow policy rejected: ${violations.join(', ')}`);
   return true;
 }
@@ -81,6 +120,9 @@ if (require.main === module) {
 
 module.exports = {
   QUALITY_WORKFLOW,
+  PROJECT_SYNC_WORKFLOW,
+  PROJECT_SYNC_SECRET,
   assertWorkflowPolicy,
-  readWorkflowFiles
+  readWorkflowFiles,
+  secretReferences
 };
