@@ -46,6 +46,11 @@ const MEDIA_ORGANISATION_IPC_CHANNELS = Object.freeze({
   mutate: 'swayforge:media:organisation:mutate',
   aiSuggestions: 'swayforge:media:organisation:ai-suggestions'
 });
+const MEDIA_INTEGRITY_IPC_CHANNELS = Object.freeze({
+  scan: 'swayforge:media:integrity:scan',
+  repair: 'swayforge:media:integrity:repair',
+  rebuildDerived: 'swayforge:media:integrity:rebuild-derived'
+});
 const SETTINGS_IPC_CHANNELS = Object.freeze({
   read: 'swayforge:settings:read',
   update: 'swayforge:settings:update',
@@ -87,28 +92,30 @@ function rejectedSettingsMutation() {
 function previewRequest(kind, mediaId) {
   return Object.freeze({ kind, version: 1, mediaId });
 }
-
 function mediaIndexSearchRequest(options) {
   const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   return Object.freeze({ ...fields, kind: 'media-index-search', version: 1 });
 }
-
 function mediaSimilarityFindRequest(mediaId, options) {
   const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   return Object.freeze({ ...fields, kind: 'media-similarity-find', version: 1, mediaId });
 }
-
 function mediaAiRequest(kind, mediaId) {
   return Object.freeze({ kind, version: 1, mediaId });
 }
-
 function organisationMutation(action, fields = {}) {
   return Object.freeze({ ...fields, kind: 'media-organisation-mutation', version: 1, action });
 }
-
 function aiSuggestionsRequest(mediaId) {
   return Object.freeze({ kind: 'media-organisation-ai-suggestions', version: 1, mediaId });
 }
+function integrityScanRequest(mediaIds, options = {}) {
+  const request = { kind: 'media-integrity-scan', version: 1, forceHash: options?.forceHash === true };
+  if (Array.isArray(mediaIds)) request.mediaIds = [...mediaIds];
+  return Object.freeze(request);
+}
+function integrityRepairRequest(mediaId) { return Object.freeze({ kind: 'media-integrity-repair', version: 1, mediaId }); }
+function integrityDerivedRequest(mediaId, targets) { return Object.freeze({ kind: 'media-integrity-rebuild-derived', version: 1, mediaId, targets: [...targets] }); }
 
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
@@ -156,6 +163,9 @@ const bridge = Object.freeze({
   getMediaAiSuggestions(mediaId) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.aiSuggestions, aiSuggestionsRequest(mediaId)); },
   acceptMediaAiSuggestion(mediaId, label) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('ai-suggestion-accept', { mediaId, label })); },
   dismissMediaAiSuggestion(mediaId, label) { return ipcRenderer.invoke(MEDIA_ORGANISATION_IPC_CHANNELS.mutate, organisationMutation('ai-suggestion-dismiss', { mediaId, label })); },
+  scanMediaIntegrity: (mediaIds = null, options = {}) => ipcRenderer.invoke(MEDIA_INTEGRITY_IPC_CHANNELS.scan, integrityScanRequest(mediaIds, options)),
+  repairManagedMedia: (mediaId) => ipcRenderer.invoke(MEDIA_INTEGRITY_IPC_CHANNELS.repair, integrityRepairRequest(mediaId)),
+  rebuildMediaDerived: (mediaId, targets = ['preview', 'index', 'similarity']) => ipcRenderer.invoke(MEDIA_INTEGRITY_IPC_CHANNELS.rebuildDerived, integrityDerivedRequest(mediaId, targets)),
   getSettings: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.read, SETTINGS_READ_REQUEST),
   updateSettings: (request) => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.update, request),
   listAiModels: () => ipcRenderer.invoke(SETTINGS_IPC_CHANNELS.aiModels, SETTINGS_AI_MODELS_REQUEST),
