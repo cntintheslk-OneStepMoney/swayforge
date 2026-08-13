@@ -83,6 +83,7 @@ test('package policy rejects private/runtime package inclusion paths', () => {
     files: ['src/**', 'runtime-data/**']
   };
   const lockJson = {
+    name: 'swayforge',
     lockfileVersion: 3,
     packages: { '': { name: 'swayforge', version: '0.1.0-dev.0' } }
   };
