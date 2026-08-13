@@ -9,7 +9,13 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const { assertPrivacySafe, scanPrivacy } = require('../scripts/check-privacy.cjs');
 const { validatePackagePolicy } = require('../scripts/check-security.cjs');
-const { assertWorkflowPolicy, readWorkflowFiles } = require('../scripts/check-workflows.cjs');
+const {
+  assertWorkflowPolicy,
+  readWorkflowFiles,
+  PROJECT_SYNC_WORKFLOW,
+  PROJECT_SYNC_SECRET,
+  secretReferences
+} = require('../scripts/check-workflows.cjs');
 
 function withTempTree(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'swayforge-quality-'));
@@ -77,6 +83,7 @@ test('package policy rejects private/runtime package inclusion paths', () => {
     files: ['src/**', 'runtime-data/**']
   };
   const lockJson = {
+    name: 'swayforge',
     lockfileVersion: 3,
     packages: { '': { name: 'swayforge', version: '0.1.0-dev.0' } }
   };
@@ -103,8 +110,16 @@ test('CI workflows enforce read-only permissions and the Windows quality job', (
 test('CI has no production social credentials, live Ollama requirement, or privileged PR trigger', () => {
   for (const workflow of readWorkflowFiles(root)) {
     assert.doesNotMatch(workflow.source, /pull_request_target\s*:/);
-    assert.doesNotMatch(workflow.source, /\$\{\{\s*secrets\./);
     assert.doesNotMatch(workflow.source, /TIKTOK_|INSTAGRAM_|YOUTUBE_|CLIENT_SECRET|ACCESS_TOKEN|REFRESH_TOKEN|OLLAMA_/);
+
+    const secrets = secretReferences(workflow.source);
+    if (workflow.relativePath === PROJECT_SYNC_WORKFLOW) {
+      assert.deepEqual([...new Set(secrets)], [PROJECT_SYNC_SECRET]);
+      assert.doesNotMatch(workflow.source, /^\s*pull_request\s*:/m);
+      assert.match(workflow.source, /github\.event\.repository\.default_branch/);
+    } else {
+      assert.deepEqual(secrets, [], workflow.relativePath);
+    }
   }
 });
 

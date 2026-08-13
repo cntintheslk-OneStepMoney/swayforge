@@ -4,9 +4,25 @@
 
 Sway Forge is a local-first desktop application for AI-assisted social-content creation, management and publishing. The product goal is to reduce the work of running social accounts without taking control away from the user: models suggest and generate, while deterministic application rules govern what is allowed.
 
+## v0.2.1 — Project Board Automation
+
+v0.2.1 is a focused maintenance release that makes the GitHub Project the development control room for Sway Forge before Content Studio work begins.
+
+Included in v0.2.1:
+
+- a canonical `Idea → Backlog → Planned → In Progress → Review → Done` development lifecycle;
+- full-roadmap Project reconciliation from the Development Index plus verified Issue/Git state;
+- synchronization of Priority, Complexity, Status, Type, Target Release, Area, actual Branch, Start Date and genuine Target Date;
+- full-board, focused-Issue and dry-run/audit synchronization modes;
+- a protected GitHub Actions workflow for Issue lifecycle changes and daily reconciliation;
+- one-time protected Project owner/type/number and credential setup documentation;
+- deterministic tests for lifecycle parsing, Project field/option handling, branch/date safety, credential redaction and workflow security.
+
+v0.2.1 does **not** connect social accounts, publish or schedule posts, collect trends, provide analytics, edit/render Content Studio videos, run Autopilot, use cloud AI, or upload creator media to third parties.
+
 ## v0.2.0 — Media Intelligence
 
-v0.2.0 turns the application foundation into an organised, searchable and AI-understandable local creator-media library.
+v0.2.0 turned the application foundation into an organised, searchable and AI-understandable local creator-media library.
 
 Included in v0.2.0:
 
@@ -18,8 +34,6 @@ Included in v0.2.0:
 - user-authored tags, collections and saved views, with explicit acceptance/dismissal of local-AI tag suggestions;
 - explicit integrity inspection for healthy, missing, changed and corrupt media plus exact-content recovery and safe derived-data rebuild controls;
 - Sway Forge branding in the persistent shell, Settings → About, fallback surface and Windows packaging identity.
-
-v0.2.0 does **not** connect social accounts, publish or schedule posts, collect trends, provide analytics, edit/render Content Studio videos, run Autopilot, use cloud AI, or upload creator media to third parties.
 
 ## Core authority model
 
@@ -36,9 +50,11 @@ Everything else is deliberately layered around it:
 
 Clearing or rebuilding derived data must not delete source media, projects, tags or collections.
 
+The GitHub Project is likewise a synchronized development visibility surface. GitHub Issues/Index and verified Git/PR state remain the written development authority; Project state cannot merge work, publish releases or grant application publishing/Autopilot authority.
+
 ## Prerequisites
 
-- Windows x64 is the verified packaging target for v0.2.0.
+- Windows x64 is the verified packaging target for v0.2.1.
 - Node.js 22.12.0 or later.
 - npm.
 - Ollama is optional for application startup and non-AI workflows. Local media-AI understanding requires a compatible locally installed vision model.
@@ -67,6 +83,12 @@ npm run check:package
 npm run smoke:electron
 ```
 
+Project bookkeeping can be reconciled by the dedicated automation after its protected repository variables/secret are configured. The underlying developer command is:
+
+```bash
+npm run sync:project
+```
+
 Windows packaging commands:
 
 ```bash
@@ -91,7 +113,7 @@ src/
   media/        Import, previews, index/search, similarity, AI understanding, organisation and integrity
   settings/     Non-secret settings model and service
   diagnostics/  Privacy-safe local diagnostic event storage
-scripts/        Quality, privacy, security, packaging and smoke checks
+scripts/        Quality, privacy, security, packaging, Project sync and smoke checks
 tests/          Deterministic architecture, media and regression coverage
 build/          Windows packaging configuration and local build assets
 ```
@@ -117,17 +139,19 @@ Media understanding requires a model that reports compatible vision capability. 
 - No telemetry or behavioural analytics.
 - No remote crash reporting.
 - No cloud AI or cloud media storage.
-- No social-platform API or publishing network path in v0.2.0.
+- No social-platform API or publishing network path in v0.2.1.
 - No arbitrary renderer filesystem, shell, network, environment-variable or credential access.
 - No raw credential values exposed to renderer code or ordinary diagnostics.
 - Diagnostics exclude prompts/responses, creator content, media paths and credential payloads.
 - Package policy checks reject private runtime data, creator media, credentials, model binaries and development-only material from release output.
 - Exact-content recovery is chosen through a trusted main-process file picker; different content cannot silently replace an existing media identity.
+- GitHub Project credentials are protected Actions secrets and are never committed or exposed to ordinary PR execution.
 
-**Never commit production social credentials, OAuth tokens, private creator media, runtime databases, local state, diagnostic exports, signing material or model caches to this repository.** Tests and fixtures must use fictional/synthetic data.
+**Never commit production social credentials, OAuth tokens, GitHub Project tokens, private creator media, runtime databases, local state, diagnostic exports, signing material or model caches to this repository.** Tests and fixtures must use fictional/synthetic data.
 
-## Known v0.2.0 limitations
+## Known v0.2.1 limitations
 
+- Live Project mutation cannot be exercised in ordinary PR CI because the protected Project credential is intentionally unavailable there; the first real full-board backfill requires the documented one-time post-merge setup.
 - Media storage is managed-copy only; referenced-source mode/relink is not implemented yet.
 - Perceptual dHash similarity is intentionally conservative review evidence and can miss major edits or over-score low-detail imagery.
 - Video understanding samples representative frames and does not analyse audio.
@@ -137,8 +161,8 @@ Media understanding requires a model that reports compatible vision capability. 
 
 ## Versioning
 
-The authoritative application version is `package.json`. Electron reports that version to the renderer/About surface, the package-lock root metadata must match it, and Windows artifact names are derived from the same value. Data schemas maintain separate schema versions.
+The authoritative application/release version is `package.json`. Electron reports that version to the renderer/About surface and Windows artifact names derive from the same value. `package-lock.json` remains the authoritative dependency snapshot: its package name, dependency maps and engine metadata must match `package.json`; a no-dependency patch release does not require cosmetic lockfile root-version rewriting. Data schemas maintain separate schema versions.
 
-Current application release metadata: **v0.2.0**.
+Current application release metadata: **v0.2.1**.
 
-See `CHANGELOG.md` for release notes and `docs/release-verification-v0.2.0.md` for the Media Intelligence release verification record.
+See `CHANGELOG.md` for release notes and `docs/release-verification-v0.2.1.md` for the Project Board Automation release verification record.

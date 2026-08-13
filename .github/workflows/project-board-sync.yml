@@ -1,0 +1,78 @@
+name: Project board sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Reconcile without mutating the Project
+        required: false
+        type: boolean
+        default: false
+      issue_number:
+        description: Optional single Issue number; blank reconciles the whole board
+        required: false
+        type: string
+  issues:
+    types: [opened, edited, reopened, closed]
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: project-board-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted sync implementation
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.repository.default_branch }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.12.0'
+
+      - name: Validate Project configuration
+        shell: bash
+        env:
+          SWAYFORGE_PROJECT_OWNER: ${{ vars.SWAYFORGE_PROJECT_OWNER }}
+          SWAYFORGE_PROJECT_OWNER_TYPE: ${{ vars.SWAYFORGE_PROJECT_OWNER_TYPE }}
+          SWAYFORGE_PROJECT_NUMBER: ${{ vars.SWAYFORGE_PROJECT_NUMBER }}
+          SWAYFORGE_PROJECT_TOKEN: ${{ secrets.SWAYFORGE_PROJECT_TOKEN }}
+        run: |
+          test -n "$SWAYFORGE_PROJECT_OWNER" || { echo 'Missing repository variable SWAYFORGE_PROJECT_OWNER'; exit 1; }
+          test -n "$SWAYFORGE_PROJECT_NUMBER" || { echo 'Missing repository variable SWAYFORGE_PROJECT_NUMBER'; exit 1; }
+          test -n "$SWAYFORGE_PROJECT_TOKEN" || { echo 'Missing Actions secret SWAYFORGE_PROJECT_TOKEN'; exit 1; }
+          case "${SWAYFORGE_PROJECT_OWNER_TYPE:-user}" in
+            user|organization) ;;
+            *) echo 'SWAYFORGE_PROJECT_OWNER_TYPE must be user or organization'; exit 1 ;;
+          esac
+
+      - name: Reconcile Project board
+        shell: bash
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          SWAYFORGE_PROJECT_OWNER: ${{ vars.SWAYFORGE_PROJECT_OWNER }}
+          SWAYFORGE_PROJECT_OWNER_TYPE: ${{ vars.SWAYFORGE_PROJECT_OWNER_TYPE }}
+          SWAYFORGE_PROJECT_NUMBER: ${{ vars.SWAYFORGE_PROJECT_NUMBER }}
+          SWAYFORGE_PROJECT_TOKEN: ${{ secrets.SWAYFORGE_PROJECT_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_ISSUE_NUMBER" ]]; then
+            args+=(--issue "$INPUT_ISSUE_NUMBER")
+          fi
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$INPUT_DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          node scripts/project-board-sync.cjs "${args[@]}"
