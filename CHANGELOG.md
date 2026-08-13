@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.2.1 — 2026-08-13
+
+### Added
+
+- GitHub Projects v2 reconciliation for the complete Sway Forge development roadmap.
+- Canonical `Idea → Backlog → Planned → In Progress → Review → Done` Project lifecycle visibility.
+- Synchronization of Priority, Complexity, Status, Type, Target Release, Area, actual Branch, Start Date and genuine Target Date metadata.
+- Full-board reconciliation, focused-Issue reconciliation and dry-run/audit modes.
+- Protected GitHub Actions automation for Issue lifecycle changes and daily reconciliation.
+- One-time Project configuration documentation using repository variables and a protected Project-only Actions secret.
+
+### Security and control
+
+- Project API credentials are never committed and are isolated to the dedicated Project synchronization workflow.
+- Ordinary repository Issue/Index reads use GitHub's short-lived workflow token rather than the long-lived Project credential.
+- Secret-bearing Project synchronization has no pull-request trigger and automatic runs use trusted default-branch implementation code.
+- Project state cannot merge pull requests, publish releases, publish social content or grant application Autopilot authority.
+- Branch and Start Date values are not fabricated for planned work; unknown Target Dates remain blank.
+
+### Quality and release integration
+
+- `package.json` is the authoritative v0.2.1 application version.
+- The dependency lockfile remains the known-good v0.2.0 dependency snapshot because v0.2.1 changes no dependencies; security checks still require package name, dependency maps and engine metadata to match.
+- Project synchronization parsing, lifecycle behavior, field-option resolution, secret redaction and workflow security are covered by deterministic tests.
+- Existing Windows packaging, privacy, security and Electron smoke gates remain required before Review.
+
+### Known limitation
+
+The connected development assistant cannot directly populate the user-owned GitHub Project. The live first backfill therefore requires the protected Project owner/type/number variables and `SWAYFORGE_PROJECT_TOKEN` secret to be configured after merge. No credential value should be placed in source, Issues, PRs or chat.
+
+### Not included
+
+Content Studio features, social account connection/OAuth, publishing or scheduling posts, trend collection/scoring, analytics/learning, campaigns, automatic PR merging and application Autopilot behavior are outside v0.2.1.
+
 ## 0.2.0 — 2026-08-12
 
 ### Added
