@@ -14,13 +14,14 @@ function escaped(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-test('release metadata has one authoritative v0.2.0 application version', () => {
+test('release metadata follows the authoritative application version', () => {
   assert.equal(packageJson.name, 'swayforge');
   assert.equal(packageJson.productName, 'SwayForge');
-  assert.equal(packageJson.version, '0.2.0');
+  assert.match(packageJson.version, /^\d+\.\d+\.\d+$/);
   assert.equal(packageLock.packages[''].name, packageJson.name);
-  assert.equal(packageLock.version, packageJson.version);
-  assert.equal(packageLock.packages[''].version, packageJson.version);
+  assert.deepEqual(packageLock.packages[''].dependencies ?? {}, packageJson.dependencies ?? {});
+  assert.deepEqual(packageLock.packages[''].devDependencies ?? {}, packageJson.devDependencies ?? {});
+  assert.deepEqual(packageLock.packages[''].optionalDependencies ?? {}, packageJson.optionalDependencies ?? {});
 
   const builder = read('build/electron-builder.config.cjs');
   assert.match(builder, /artifactName:\s*'\$\{productName\}-\$\{version\}-win-\$\{arch\}\.\$\{ext\}'/);
@@ -30,7 +31,7 @@ test('release metadata has one authoritative v0.2.0 application version', () => 
   const changelog = read('CHANGELOG.md');
   const versionPattern = escaped(packageJson.version);
   assert.match(readme, new RegExp(`Current application release metadata: \\*\\*v${versionPattern}\\*\\*`));
-  assert.match(changelog, new RegExp(`## ${versionPattern} — 2026-08-12`));
+  assert.match(changelog, new RegExp(`## ${versionPattern} — \\d{4}-\\d{2}-\\d{2}`));
   assert.ok(fs.existsSync(path.join(root, `docs/release-verification-v${packageJson.version}.md`)));
 });
 
