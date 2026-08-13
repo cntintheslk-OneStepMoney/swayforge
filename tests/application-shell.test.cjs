@@ -52,11 +52,11 @@ test('application shell is semantic, selected state is announced and future area
 
 test('renderer navigation has a one-time boot guard and keyboard support', () => {
   const source = read('src/renderer/renderer-app.js');
-  assert.match(source, /if \(booted\) return;/);
+  assert.match(source, /if \(booted\) return/);
   assert.match(source, /ArrowDown/);
   assert.match(source, /ArrowUp/);
-  assert.match(source, /Home: 'first'/);
-  assert.match(source, /End: 'last'/);
+  assert.match(source, /Home:'first'|Home: 'first'/);
+  assert.match(source, /End:'last'|End: 'last'/);
   assert.match(source, /route\?\.enabled/);
   assert.match(source, /aria-current/);
 });
@@ -83,8 +83,8 @@ test('media import is only attached to the explicit existing typed action', () =
 
 test('untrusted project and media strings are rendered as inert text', () => {
   const source = read('src/renderer/renderer-app.js');
-  assert.match(source, /heading\.textContent = title/);
-  assert.match(source, /body\.textContent = description/);
+  assert.match(source, /heading\.textContent=title|heading\.textContent = title/);
+  assert.match(source, /body\.textContent=description|body\.textContent = description/);
   assert.doesNotMatch(source, /\.innerHTML\s*=/);
   assert.doesNotMatch(source, /insertAdjacentHTML/);
   assert.doesNotMatch(source, /document\.write/);
