@@ -14,6 +14,8 @@ const {
   readWorkflowFiles,
   PROJECT_SYNC_WORKFLOW,
   PROJECT_SYNC_SECRET,
+  DEVOPS_PROJECT_SYNC_WORKFLOW,
+  DEVOPS_PROJECT_SYNC_SECRET,
   secretReferences
 } = require('../scripts/check-workflows.cjs');
 
@@ -117,6 +119,9 @@ test('CI has no production social credentials, live Ollama requirement, or privi
       assert.deepEqual([...new Set(secrets)], [PROJECT_SYNC_SECRET]);
       assert.doesNotMatch(workflow.source, /^\s*pull_request\s*:/m);
       assert.match(workflow.source, /github\.event\.repository\.default_branch/);
+    } else if (workflow.relativePath === DEVOPS_PROJECT_SYNC_WORKFLOW) {
+      assert.deepEqual([...new Set(secrets)], [DEVOPS_PROJECT_SYNC_SECRET]);
+      assert.doesNotMatch(workflow.source, /^\s*pull_request\s*:/m);
     } else {
       assert.deepEqual(secrets, [], workflow.relativePath);
     }
