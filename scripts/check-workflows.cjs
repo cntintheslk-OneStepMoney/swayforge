@@ -6,6 +6,8 @@ const path = require('node:path');
 const QUALITY_WORKFLOW = '.github/workflows/quality.yml';
 const PROJECT_SYNC_WORKFLOW = '.github/workflows/project-board-sync.yml';
 const PROJECT_SYNC_SECRET = 'SWAYFORGE_PROJECT_TOKEN';
+const DEVOPS_PROJECT_SYNC_WORKFLOW = '.github/workflows/project-sync.yml';
+const DEVOPS_PROJECT_SYNC_SECRET = 'DEVOPS_PROJECT_TOKEN';
 
 function readWorkflowFiles(root) {
   const workflowDirectory = path.join(root, '.github', 'workflows');
@@ -56,7 +58,8 @@ function assertWorkflowPolicy(root = process.cwd()) {
     const secrets = secretReferences(workflow.source);
     for (const secret of secrets) {
       const allowedProjectSecret = workflow.relativePath === PROJECT_SYNC_WORKFLOW && secret === PROJECT_SYNC_SECRET;
-      if (!allowedProjectSecret) {
+      const allowedDevOpsProjectSecret = workflow.relativePath === DEVOPS_PROJECT_SYNC_WORKFLOW && secret === DEVOPS_PROJECT_SYNC_SECRET;
+      if (!allowedProjectSecret && !allowedDevOpsProjectSecret) {
         violations.push(`${workflow.relativePath} (Actions secret ${secret} is not allowlisted)`);
       }
     }
@@ -140,6 +143,8 @@ module.exports = {
   QUALITY_WORKFLOW,
   PROJECT_SYNC_WORKFLOW,
   PROJECT_SYNC_SECRET,
+  DEVOPS_PROJECT_SYNC_WORKFLOW,
+  DEVOPS_PROJECT_SYNC_SECRET,
   assertWorkflowPolicy,
   readWorkflowFiles,
   secretReferences,
