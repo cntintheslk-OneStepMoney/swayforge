@@ -4,8 +4,8 @@
 .content-brief-form { display: grid; gap: .9rem; }
 .content-field { display: grid; gap: .35rem; font-size: .9rem; }
 .content-field > span { font-weight: 650; }
-.content-field input, .content-field textarea, .content-field select { width: 100%; box-sizing: border-box; border: 1px solid var(--border-subtle, #475569); border-radius: 10px; padding: .7rem .75rem; background: var(--surface, #111827); color: inherit; font: inherit; }
-.content-field textarea { resize: vertical; min-height: 4.5rem; }
+.content-field input, .content-field textarea, .content-field select, .content-writing-accepted textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border-subtle, #475569); border-radius: 10px; padding: .7rem .75rem; background: var(--surface, #111827); color: inherit; font: inherit; }
+.content-field textarea, .content-writing-accepted textarea { resize: vertical; min-height: 4.5rem; }
 .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
 .content-media-list { display: grid; gap: .5rem; max-height: 260px; overflow: auto; padding-right: .25rem; }
 .content-media-option { display: flex; gap: .65rem; align-items: flex-start; border: 1px solid var(--border-subtle, #334155); border-radius: 10px; padding: .65rem; cursor: pointer; }
@@ -19,5 +19,13 @@
 .content-stage.is-current { outline: 2px solid var(--accent, #60a5fa); outline-offset: -2px; }
 .content-status { min-height: 1.4rem; margin: .75rem 0; }
 .content-status.is-error { color: var(--danger, #fca5a5); }
+.content-writing-panel { margin-top: 1rem; display: grid; gap: .9rem; }
+.content-writing-options { display: grid; gap: .65rem; }
+.content-writing-option { display: grid; gap: .55rem; padding: .8rem; border: 1px solid var(--border-subtle, #334155); border-radius: 12px; }
+.content-writing-option p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.content-writing-option small { opacity: .75; }
+.content-writing-option .button { justify-self: start; }
+.content-writing-accepted { display: grid; gap: .55rem; padding-top: .8rem; border-top: 1px solid var(--border-subtle, #334155); }
+.content-writing-accepted h5 { margin: 0; }
 @media (max-width: 900px) { .content-layout { grid-template-columns: 1fr; } .content-stage-panel { position: static; } }
 @media (max-width: 640px) { .content-grid { grid-template-columns: 1fr; } }
