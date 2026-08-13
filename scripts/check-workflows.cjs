@@ -21,16 +21,33 @@ function secretReferences(source) {
   return [...source.matchAll(/\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}/g)].map((match) => match[1]);
 }
 
+function topLevelPermissions(source) {
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === 'permissions:' && !/^\s/.test(line));
+  if (start < 0) return new Map();
+
+  const permissions = new Map();
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim()) continue;
+    if (!/^\s/.test(line)) break;
+    const match = line.match(/^\s{2}([A-Za-z0-9_-]+):\s*(read|write|none)\s*$/);
+    if (match) permissions.set(match[1], match[2]);
+  }
+  return permissions;
+}
+
 function assertWorkflowPolicy(root = process.cwd()) {
   const workflows = readWorkflowFiles(root);
   const violations = [];
 
   for (const workflow of workflows) {
-    if (!/^permissions:\s*\n\s{2}contents:\s*read\s*$/m.test(workflow.source)) {
+    const permissions = topLevelPermissions(workflow.source);
+    if (permissions.get('contents') !== 'read') {
       violations.push(`${workflow.relativePath} (missing explicit read-only contents permission)`);
     }
-    if (/^\s+[A-Za-z0-9_-]+:\s*write\s*$/m.test(workflow.source)) {
-      violations.push(`${workflow.relativePath} (write permission not allowed in normal CI)`);
+    for (const [scope, access] of permissions) {
+      if (access === 'write') violations.push(`${workflow.relativePath} (${scope}: write permission not allowed in normal CI)`);
     }
     if (/pull_request_target\s*:/m.test(workflow.source)) {
       violations.push(`${workflow.relativePath} (pull_request_target is not allowed)`);
@@ -86,6 +103,7 @@ function assertWorkflowPolicy(root = process.cwd()) {
       'schedule:',
       'permissions:',
       'contents: read',
+      'issues: read',
       'actions/checkout@v6',
       'github.event.repository.default_branch',
       `secrets.${PROJECT_SYNC_SECRET}`,
@@ -124,5 +142,6 @@ module.exports = {
   PROJECT_SYNC_SECRET,
   assertWorkflowPolicy,
   readWorkflowFiles,
-  secretReferences
+  secretReferences,
+  topLevelPermissions
 };
