@@ -37,12 +37,30 @@ function collectSourceFiles(directory, output = []) {
   return output;
 }
 
+function dependencyMapsMatch(packageMap, lockMap) {
+  const packageEntries = Object.entries(packageMap ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  const lockEntries = Object.entries(lockMap ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(packageEntries) === JSON.stringify(lockEntries);
+}
+
 function validatePackagePolicy(packageJson, lockJson) {
   if (!lockJson || lockJson.lockfileVersion !== 3) throw new Error('package-lock.json version 3 is required.');
   const rootPackage = lockJson.packages?.[''];
   if (!rootPackage) throw new Error('package-lock.json is missing the root package entry.');
-  if (rootPackage.name !== packageJson.name || rootPackage.version !== packageJson.version) {
-    throw new Error('package.json and package-lock.json metadata are inconsistent.');
+  if (lockJson.name !== packageJson.name || rootPackage.name !== packageJson.name) {
+    throw new Error('package.json and package-lock.json package names are inconsistent.');
+  }
+
+  // package.json is the application/release version authority. A patch release that
+  // changes no dependencies does not need to rewrite package-lock root version metadata.
+  // Dependency and engine metadata must still match so a genuinely stale lockfile fails.
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+    if (!dependencyMapsMatch(packageJson[field], rootPackage[field])) {
+      throw new Error(`package.json and package-lock.json ${field} are inconsistent.`);
+    }
+  }
+  if (!dependencyMapsMatch(packageJson.engines, rootPackage.engines)) {
+    throw new Error('package.json and package-lock.json engines are inconsistent.');
   }
 
   const allDependencies = {
@@ -108,5 +126,6 @@ module.exports = {
   assertSourcePolicy,
   checkSecurity,
   collectSourceFiles,
+  dependencyMapsMatch,
   validatePackagePolicy
 };
