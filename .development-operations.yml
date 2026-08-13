@@ -1,0 +1,136 @@
+{
+  "$schema": "./schemas/repository-adapter.schema.json",
+  "standardsVersion": "0.2.0",
+  "project": {
+    "displayName": "Sway Forge Development",
+    "repository": "cntintheslk-OneStepMoney/swayforge",
+    "owner": "cntintheslk-OneStepMoney",
+    "ownerType": "user",
+    "number": 3,
+    "centralPortfolio": {
+      "owner": "cntintheslk-OneStepMoney",
+      "ownerType": "user",
+      "number": 5
+    }
+  },
+  "areas": [
+    "Accessibility / UI/UX / Quality",
+    "Analytics / Creative Intelligence / Content Studio",
+    "Analytics / Data Model / Metrics",
+    "Analytics / History / Attribution / Refresh",
+    "Analytics / Instagram / Insights",
+    "Analytics / Recommendations / Learning Controls / UI/UX",
+    "Analytics / TikTok / Performance",
+    "Analytics / Trends / Outcome Analysis",
+    "Analytics / YouTube / Performance",
+    "Autopilot / AI / Quality Review",
+    "Autopilot / Cadence / Duplicate Prevention",
+    "Autopilot / Content Creation / AI",
+    "Autopilot / Orchestration / State Machine",
+    "Autopilot / Permissions / Safety",
+    "Autopilot / Publishing Safety / Compliance",
+    "Autopilot / Review / UI/UX",
+    "Autopilot / Safety / Recovery",
+    "Branding / UI/UX / Windows Packaging",
+    "Campaigns / Planning / UI/UX",
+    "Data Integrity / Backup / Recovery / Export",
+    "Data Integrity / Migration / Compatibility",
+    "Data Integrity / Migration / Stable Contract",
+    "Desktop / Scheduling / Runtime Availability",
+    "Documentation / Privacy / Supportability",
+    "Learning / Creator Preferences / Feedback",
+    "Onboarding / Readiness / UI/UX",
+    "Performance / Media / Rendering / Storage",
+    "Platforms / API Verification / Release Support",
+    "Privacy / Diagnostics / Network / Security",
+    "Project Management / Automation / GitHub",
+    "Publishing / Providers / Reliability",
+    "Quality / Reliability / Failure Injection",
+    "Release Integration / Analytics / Learning / Quality",
+    "Release Integration / Autopilot / Safety / Quality",
+    "Release Integration / Publishing / Security / Quality",
+    "Release Integration / Quality / Security / Reliability",
+    "Release Integration / Scheduling / Campaigns / Quality",
+    "Release Integration / Stable Release / Quality",
+    "Release Integration / Trends / Quality",
+    "Scheduling / Calendar / UI/UX",
+    "Scheduling / Campaigns / Data Model",
+    "Scheduling / Publishing / Safety",
+    "Scheduling / Queue / Local Runtime",
+    "Scheduling / Recovery / Conflicts",
+    "Scheduling / Recurrence / Templates",
+    "Security / Privacy / Threat Model",
+    "Trends / AI / Creator Relevance",
+    "Trends / Clustering / Deduplication",
+    "Trends / Google Trends / Public Signals",
+    "Trends / Media / Content Opportunities",
+    "Trends / Opportunities / UI/UX / Explainability",
+    "Trends / Reliability / Rate Limits / Cache",
+    "Trends / Scoring / Intelligence",
+    "Trends / Sources / Data Model",
+    "Trends / YouTube / Public Signals",
+    "Windows / Packaging / Updates / Data Safety",
+    "Windows / Release / Distribution / Signing",
+    "Workspaces / Social Accounts / Creator Identity"
+  ],
+  "platforms": [
+    "windows",
+    "electron",
+    "local-ai"
+  ],
+  "commands": {
+    "test": "npm test",
+    "validate": "npm run check",
+    "lint": "npm run lint",
+    "desktop": "npm start",
+    "windowsPackage": "npm run dist:win"
+  },
+  "policyReferences": [
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "docs/credential-storage.md",
+    "docs/media-integrity.md",
+    "docs/windows-packaging.md"
+  ],
+  "security": {
+    "threatExtensions": [
+      "local creator media and derived content provenance",
+      "protected social-provider credentials and account boundaries",
+      "local Ollama execution with no cloud AI fallback",
+      "publishing review consent scheduling and duplicate prevention",
+      "Electron IPC filesystem media processing and structured subprocess arguments",
+      "Windows NSIS packaging and user-data preservation",
+      "no telemetry analytics cloud creator-media storage or remote crash reporting",
+      "fictional synthetic and redistribution-safe repository test data only"
+    ]
+  },
+  "inheritance": {
+    "preserve": [
+      ".github/PULL_REQUEST_TEMPLATE.md",
+      "SECURITY.md"
+    ]
+  },
+  "overrides": {
+    "branchMigration": {
+      "currentIntegrationBranch": "main",
+      "currentProductionEquivalent": "main",
+      "state": "legacy-main-preserved-until-deliberate-migration",
+      "directPushAllowed": false,
+      "draftPullRequestsRequired": true
+    },
+    "productSafety": {
+      "creatorMediaAuthoritative": true,
+      "localFirstOfflineCapable": true,
+      "cloudAIAllowed": false,
+      "telemetryAllowed": false,
+      "publishingRequiresUserControl": true
+    },
+    "release": {
+      "primaryPlatform": "Windows",
+      "installer": "NSIS",
+      "automaticPublicationAllowed": false,
+      "userDataPreservedOnUninstall": true
+    }
+  }
+}

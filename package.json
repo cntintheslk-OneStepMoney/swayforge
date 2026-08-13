@@ -21,7 +21,9 @@
     "smoke:electron": "node scripts/electron-smoke.cjs",
     "sync:project": "node scripts/project-board-sync.cjs",
     "pack:win": "electron-builder --config build/electron-builder.config.cjs --win --x64 --dir --publish never",
-    "dist:win": "electron-builder --config build/electron-builder.config.cjs --win nsis --x64 --publish never"
+    "dist:win": "electron-builder --config build/electron-builder.config.cjs --win nsis --x64 --publish never",
+    "validate": "node scripts/validate-adapter.mjs .development-operations.yml",
+    "inheritance:check": "node scripts/sync-inheritance.mjs ."
   },
   "engines": {
     "node": ">=22.12.0"
