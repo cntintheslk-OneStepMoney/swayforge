@@ -19,13 +19,18 @@
 .content-stage.is-current { outline: 2px solid var(--accent, #60a5fa); outline-offset: -2px; }
 .content-status { min-height: 1.4rem; margin: .75rem 0; }
 .content-status.is-error { color: var(--danger, #fca5a5); }
-.content-writing-panel { margin-top: 1rem; display: grid; gap: .9rem; }
-.content-writing-options { display: grid; gap: .65rem; }
-.content-writing-option { display: grid; gap: .55rem; padding: .8rem; border: 1px solid var(--border-subtle, #334155); border-radius: 12px; }
+.content-writing-panel, .storyboard-panel { margin-top: 1rem; display: grid; gap: .9rem; }
+.content-writing-options, .storyboard-proposal, .storyboard-shot-list { display: grid; gap: .65rem; }
+.content-writing-option, .storyboard-proposal-shot, .storyboard-shot { display: grid; gap: .55rem; padding: .8rem; border: 1px solid var(--border-subtle, #334155); border-radius: 12px; }
 .content-writing-option p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.content-writing-option small { opacity: .75; }
+.content-writing-option small, .storyboard-proposal-shot small { opacity: .75; }
 .content-writing-option .button { justify-self: start; }
 .content-writing-accepted { display: grid; gap: .55rem; padding-top: .8rem; border-top: 1px solid var(--border-subtle, #334155); }
-.content-writing-accepted h5 { margin: 0; }
+.content-writing-accepted h5, .storyboard-panel h5 { margin: 0; }
+.storyboard-shot__heading { display: flex; justify-content: space-between; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+.storyboard-shot__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.storyboard-manual { border-top: 1px solid var(--border-subtle, #334155); padding-top: .8rem; }
+.storyboard-manual > summary { cursor: pointer; font-weight: 650; margin-bottom: .75rem; }
+.storyboard-manual .button { margin-top: .75rem; }
 @media (max-width: 900px) { .content-layout { grid-template-columns: 1fr; } .content-stage-panel { position: static; } }
-@media (max-width: 640px) { .content-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .content-grid, .storyboard-shot__grid { grid-template-columns: 1fr; } }
