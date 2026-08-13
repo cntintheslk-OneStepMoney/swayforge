@@ -5,7 +5,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.SwayForgeNavigation = api;
   if (root?.document) {
-    for (const source of ['./settings-page.js', './content-studio-ui.js', './content-writing-ui.js', './content-storyboard-ui.js']) {
+    for (const source of ['./settings-page.js', './content-studio-ui.js', './content-writing-ui.js', './content-storyboard-ui.js', './content-workspace-ui.js']) {
       const script = root.document.createElement('script');
       script.src = source;
       script.async = false;

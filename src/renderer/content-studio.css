@@ -32,5 +32,24 @@
 .storyboard-manual { border-top: 1px solid var(--border-subtle, #334155); padding-top: .8rem; }
 .storyboard-manual > summary { cursor: pointer; font-weight: 650; margin-bottom: .75rem; }
 .storyboard-manual .button { margin-top: .75rem; }
+.content-workspace { margin-top: 1rem; display: grid; gap: 1rem; }
+.workspace-section { display: grid; gap: .7rem; padding-top: .8rem; border-top: 1px solid var(--border-subtle, #334155); }
+.workspace-section h5 { margin: 0; }
+.workspace-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.timeline-strip { display: flex; gap: .65rem; overflow-x: auto; padding: .35rem 0; }
+.timeline-clip { min-width: 180px; display: grid; gap: .45rem; padding: .7rem; border: 1px solid var(--border-subtle, #334155); border-radius: 10px; }
+.timeline-clip span { font-size: .8rem; opacity: .75; }
+.timeline-clip { min-width: calc(180px * var(--timeline-zoom, 1)); }
+.timeline-clip.is-selected { outline: 2px solid var(--focus-ring, #60a5fa); }
+.clip-editor, .text-item-row, .clip-audio-row { display: grid; gap: .5rem; }
+.timeline-preview { position: relative; min-height: 180px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--border-subtle, #334155); border-radius: 12px; }
+.timeline-preview img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; }
+.timed-text-preview { position: absolute; left: 8%; right: 8%; z-index: 2; padding: .35rem .5rem; border-radius: 6px; background: rgba(0,0,0,.68); color: #fff; text-align: center; overflow-wrap: anywhere; }
+.timed-text-preview.is-top-safe { top: 10%; } .timed-text-preview.is-centre { top: 45%; } .timed-text-preview.is-bottom-safe { bottom: 12%; }
+.audio-item-row { display: flex; justify-content: space-between; gap: .75rem; align-items: center; }
+.cover-preview { aspect-ratio: 9 / 16; max-height: 320px; display: flex; justify-content: center; padding: 10%; border: 1px solid var(--border-subtle, #334155); border-radius: 12px; background: linear-gradient(135deg, var(--surface, #111827), var(--surface-raised, #182132)); font-weight: 750; overflow-wrap: anywhere; }
+.cover-preview[data-profile="square"] { aspect-ratio: 1; }
+.cover-preview[data-profile="landscape"] { aspect-ratio: 16 / 9; }
+.cover-preview[data-crop="fit"] { outline: 2px dashed var(--border-subtle, #475569); outline-offset: -12px; }
 @media (max-width: 900px) { .content-layout { grid-template-columns: 1fr; } .content-stage-panel { position: static; } }
 @media (max-width: 640px) { .content-grid, .storyboard-shot__grid { grid-template-columns: 1fr; } }

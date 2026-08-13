@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.3.0 — 2026-08-13
+
+### Added
+
+- A versioned local Content Studio project and creative-brief model with revision protection, media references and user/AI provenance.
+- Optional local-AI writing workflows for ideas, hooks, scripts, captions, rewrites and critiques; generated results remain proposals until accepted.
+- AI-assisted storyboard proposals constrained to real local media IDs, with explicit accept/edit/reorder/reject flows and manual fallback.
+- A non-destructive editable timeline with deterministic clip ordering, trim/split/replace/reorder operations, bounded undo/redo and keyboard alternatives.
+- A deterministic local FFmpeg render engine with trusted structured arguments, staged outputs, ffprobe verification, checksums, cancellation cleanup and bounded concurrency.
+- Timed subtitles, hooks, titles and labels using controlled styles/placements and escaped FFmpeg drawtext integration.
+- Local audio/voiceover foundations with rights provenance, bounded gain/fade/mute/solo controls and deterministic mixing.
+- Local cover/thumbnail creation from creator media or render outputs with controlled crop/text profiles and staged PNG export.
+- Local 9:16, 1:1 and 16:9 export variants with per-variant caption/title/crop overrides, collision-safe destinations and export provenance records.
+
+### Security, privacy and creator control
+
+- Creator media and project state remain local; v0.3.0 adds no cloud AI/render/upload path, social OAuth, publishing, scheduling, trend collection or Autopilot.
+- Source media remains authoritative and non-destructive; timeline, cover and render outputs are derivatives/references and release regressions verify source hashes remain unchanged.
+- FFmpeg is invoked through structured argument arrays with `shell:false`; renderer/user text cannot supply arbitrary commands, filters or raw FFmpeg flags.
+- Standalone audio keeps explicit rights status and v0.3.0 includes no trending-audio ripping or background microphone capture.
+- CI provisions FFmpeg only for deterministic tests. Production tool resolution is explicit through packaged, configured or system-path tooling; Sway Forge does not silently download binaries.
+
+### Quality and release integration
+
+- `package.json` is the authoritative v0.3.0 application version and drives runtime/About and Windows artifact naming.
+- The dependency lockfile remains the known-good v0.2.0 dependency snapshot because v0.3.0 adds no npm dependencies; dependency maps/engine metadata remain checked for consistency.
+- Release regression covers the complete local brief → AI/manual writing → storyboard → timeline → text/audio/cover → verified render → export-variant flow using synthetic redistribution-safe media.
+- Linux and Windows quality gates install a CI-only FFmpeg test tool before render regressions; the Windows package workflow does the same before its complete test phase.
+- Existing privacy, security, workflow, lint, Electron smoke and Windows packaging/installer verification remain required before Review.
+
+### Known limitations
+
+- Windows x64 remains the verified packaging target and the installer remains unsigned.
+- Production FFmpeg binary distribution is not silently bundled by this release; packaged/configured/system resolution is supported and any future bundled binary must receive an explicit redistribution/licensing review.
+- Timed text uses controlled presets rather than arbitrary fonts/CSS/filtergraphs.
+- Audio supports local imported/voiceover foundations rather than trending-audio acquisition or a full DAW-style editor.
+- Export profiles express local platform intent only; they do not claim a connected account or verified live platform compatibility.
+- Ollama remains optional and separately installed/configured; manual project creation and rendering remain available when it is unavailable.
+
+### Not included
+
+Social account connection/OAuth, publishing/upload APIs, scheduling, live platform capability negotiation, trend intelligence, analytics/learning, campaigns, Autopilot, cloud rendering and generative video are outside v0.3.0.
+
 ## 0.2.1 — 2026-08-13
 
 ### Added

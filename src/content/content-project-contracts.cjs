@@ -89,8 +89,9 @@ function validateContentProject(project, { mediaCatalog = [] } = {}) {
   assertTimestamp(project.createdAt, 'createdAt'); assertTimestamp(project.updatedAt, 'updatedAt'); validateBrief(project.brief);
   assertObject(project.userAuthored, 'userAuthored'); assertSafeData(project.userAuthored, 'userAuthored'); validateProvenance(project.acceptedAiProposals);
   if (!Array.isArray(project.mediaReferences)) throw new TypeError('mediaReferences must be an array.');
-  const expected = mediaReferenceState(project.brief, mediaCatalog); const expectedById = new Map(expected.map((item) => [item.id, item.availability]));
-  for (const ref of project.mediaReferences) { assertObject(ref, 'media reference'); assertMediaId(ref.id); assertEnum(ref.availability, ['ready','missing','unavailable','changed','corrupt'], 'media availability'); if (!expectedById.has(ref.id)) throw new TypeError('mediaReferences contains an unapproved media ID.'); }
+  const expected = mediaReferenceState(project.brief, mediaCatalog); const expectedById = new Map(expected.map((item) => [item.id, item.availability])); const actualIds = new Set();
+  for (const ref of project.mediaReferences) { assertObject(ref, 'media reference'); assertMediaId(ref.id); assertEnum(ref.availability, ['ready','missing','unavailable','changed','corrupt'], 'media availability'); if (!expectedById.has(ref.id)) throw new TypeError('mediaReferences contains an unapproved media ID.'); if (actualIds.has(ref.id)) throw new TypeError('mediaReferences contains duplicates.'); actualIds.add(ref.id); }
+  if (actualIds.size !== expectedById.size || [...expectedById.keys()].some((id) => !actualIds.has(id))) throw new TypeError('mediaReferences must exactly match selected and excluded media.');
   for (const key of ['storyboard','timeline','timedText','audio','cover','variants','renderOutputs']) assertSafeData(project[key], key);
   assertSafeData(project, 'content project'); return project;
 }

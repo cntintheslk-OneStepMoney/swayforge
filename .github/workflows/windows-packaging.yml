@@ -32,6 +32,10 @@ jobs:
           node-version: 22.12.0
           package-manager-cache: false
 
+      - name: Install FFmpeg test tools
+        shell: pwsh
+        run: choco install ffmpeg --version=8.1.2 --no-progress --yes
+
       - name: Install locked dependencies
         run: npm ci
 
