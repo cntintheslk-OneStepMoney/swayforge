@@ -2,7 +2,7 @@
 
 const mediaFoundation = require('./preview-bootstrap.cjs');
 const mediaIntegrity = require('./integrity-bootstrap.cjs');
-const contentStudio = require('./content-bootstrap.cjs');
+const contentStudio = require('./writing-bootstrap.cjs');
 
 module.exports = Object.freeze({
   ...mediaFoundation,
