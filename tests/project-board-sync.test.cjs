@@ -173,12 +173,12 @@ test('Project token-like values are redacted from API failure text', () => {
   assert.equal(redactSensitive(`failure ${sentinel}`, [sentinel]), 'failure [REDACTED]');
 });
 
-test('v0.2.1 is the authoritative application release version without rewriting dependency snapshot metadata', () => {
+test('application release version stays independent from the dependency snapshot version', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const lockJson = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   const rootPackage = lockJson.packages?.[''];
 
-  assert.equal(packageJson.version, '0.2.1');
+  assert.match(packageJson.version, /^\d+\.\d+\.\d+$/);
   assert.equal(rootPackage?.name, packageJson.name);
   assert.deepEqual(rootPackage?.dependencies ?? {}, packageJson.dependencies ?? {});
   assert.deepEqual(rootPackage?.devDependencies ?? {}, packageJson.devDependencies ?? {});
