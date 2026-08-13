@@ -18,14 +18,15 @@ test('navigation exposes one canonical entry for every intended destination', ()
   assert.equal(new Set(keys).size, keys.length);
   assert.deepEqual(
     navigation.ROUTES.filter((route) => !route.enabled).map((route) => route.key),
-    ['create', 'trends', 'publishing']
+    ['trends', 'publishing']
   );
   assert.equal(navigation.normaliseRouteKey('publishing'), 'home');
 });
 
-test('keyboard route movement skips disabled future destinations', () => {
+test('keyboard route movement includes Content Studio and skips disabled future destinations', () => {
   assert.equal(navigation.moveEnabledRoute('home', 'next'), 'projects');
-  assert.equal(navigation.moveEnabledRoute('media', 'next'), 'settings');
+  assert.equal(navigation.moveEnabledRoute('media', 'next'), 'create');
+  assert.equal(navigation.moveEnabledRoute('create', 'next'), 'settings');
   assert.equal(navigation.moveEnabledRoute('settings', 'next'), 'home');
   assert.equal(navigation.moveEnabledRoute('home', 'previous'), 'settings');
   assert.equal(navigation.moveEnabledRoute('projects', 'first'), 'home');

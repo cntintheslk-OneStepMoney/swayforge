@@ -18,6 +18,13 @@ const STORAGE_IPC_CHANNELS = Object.freeze({
   projectList: 'swayforge:storage:project:list',
   projectArchive: 'swayforge:storage:project:archive'
 });
+const CONTENT_IPC_CHANNELS = Object.freeze({
+  list: 'swayforge:content:project:list',
+  create: 'swayforge:content:project:create',
+  read: 'swayforge:content:project:read',
+  update: 'swayforge:content:project:update',
+  archive: 'swayforge:content:project:archive'
+});
 const SECRET_IPC_CHANNELS = Object.freeze({ status: 'swayforge:secret-storage:status' });
 const MEDIA_IPC_CHANNELS = Object.freeze({
   chooseImport: 'swayforge:media:choose-import',
@@ -81,6 +88,7 @@ const SETTINGS_OPEN_APP_DATA_REQUEST = Object.freeze({ kind: 'settings-open-app-
 const DIAGNOSTIC_LIST_REQUEST = Object.freeze({ kind: 'diagnostics-list', version: 1 });
 const DIAGNOSTIC_EXPORT_REQUEST = Object.freeze({ kind: 'diagnostics-export', version: 1 });
 const DIAGNOSTIC_CLEAR_REQUEST = Object.freeze({ kind: 'diagnostics-clear', version: 1 });
+const CONTENT_LIST_REQUEST = Object.freeze({ kind: 'content-project-list', version: 1 });
 
 function rejectedSettingsMutation() {
   return Promise.resolve(Object.freeze({
@@ -89,33 +97,16 @@ function rejectedSettingsMutation() {
   }));
 }
 
-function previewRequest(kind, mediaId) {
-  return Object.freeze({ kind, version: 1, mediaId });
-}
-function mediaIndexSearchRequest(options) {
-  const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
-  return Object.freeze({ ...fields, kind: 'media-index-search', version: 1 });
-}
-function mediaSimilarityFindRequest(mediaId, options) {
-  const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
-  return Object.freeze({ ...fields, kind: 'media-similarity-find', version: 1, mediaId });
-}
-function mediaAiRequest(kind, mediaId) {
-  return Object.freeze({ kind, version: 1, mediaId });
-}
-function organisationMutation(action, fields = {}) {
-  return Object.freeze({ ...fields, kind: 'media-organisation-mutation', version: 1, action });
-}
-function aiSuggestionsRequest(mediaId) {
-  return Object.freeze({ kind: 'media-organisation-ai-suggestions', version: 1, mediaId });
-}
-function integrityScanRequest(mediaIds, options = {}) {
-  const request = { kind: 'media-integrity-scan', version: 1, forceHash: options?.forceHash === true };
-  if (Array.isArray(mediaIds)) request.mediaIds = [...mediaIds];
-  return Object.freeze(request);
-}
+function previewRequest(kind, mediaId) { return Object.freeze({ kind, version: 1, mediaId }); }
+function mediaIndexSearchRequest(options) { const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {}; return Object.freeze({ ...fields, kind: 'media-index-search', version: 1 }); }
+function mediaSimilarityFindRequest(mediaId, options) { const fields = options && typeof options === 'object' && !Array.isArray(options) ? options : {}; return Object.freeze({ ...fields, kind: 'media-similarity-find', version: 1, mediaId }); }
+function mediaAiRequest(kind, mediaId) { return Object.freeze({ kind, version: 1, mediaId }); }
+function organisationMutation(action, fields = {}) { return Object.freeze({ ...fields, kind: 'media-organisation-mutation', version: 1, action }); }
+function aiSuggestionsRequest(mediaId) { return Object.freeze({ kind: 'media-organisation-ai-suggestions', version: 1, mediaId }); }
+function integrityScanRequest(mediaIds, options = {}) { const request = { kind: 'media-integrity-scan', version: 1, forceHash: options?.forceHash === true }; if (Array.isArray(mediaIds)) request.mediaIds = [...mediaIds]; return Object.freeze(request); }
 function integrityRepairRequest(mediaId) { return Object.freeze({ kind: 'media-integrity-repair', version: 1, mediaId }); }
 function integrityDerivedRequest(mediaId, targets) { return Object.freeze({ kind: 'media-integrity-rebuild-derived', version: 1, mediaId, targets: [...targets] }); }
+function contentRequest(kind, fields = {}) { return Object.freeze({ ...fields, kind, version: 1 }); }
 
 const bridge = Object.freeze({
   getApplicationInfo: () => ipcRenderer.invoke(IPC_CHANNELS.applicationInfo),
@@ -124,14 +115,17 @@ const bridge = Object.freeze({
   refreshAiRuntimeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.aiRuntimeRefresh, AI_REFRESH_REQUEST),
   getSecretStorageStatus: () => ipcRenderer.invoke(SECRET_IPC_CHANNELS.status, SECRET_STATUS_REQUEST),
   getApplicationState: () => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.applicationStateRead),
-  updateApplicationState: (request) => request?.patch && Object.hasOwn(request.patch, 'settings')
-    ? rejectedSettingsMutation()
-    : ipcRenderer.invoke(STORAGE_IPC_CHANNELS.applicationStateUpdate, request),
+  updateApplicationState: (request) => request?.patch && Object.hasOwn(request.patch, 'settings') ? rejectedSettingsMutation() : ipcRenderer.invoke(STORAGE_IPC_CHANNELS.applicationStateUpdate, request),
   createProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectCreate, request),
   getProject: (projectId) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectRead, { projectId }),
   updateProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectUpdate, request),
   listProjects: () => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectList),
   archiveProject: (request) => ipcRenderer.invoke(STORAGE_IPC_CHANNELS.projectArchive, request),
+  listContentProjects: () => ipcRenderer.invoke(CONTENT_IPC_CHANNELS.list, CONTENT_LIST_REQUEST),
+  createContentProject: (fields) => ipcRenderer.invoke(CONTENT_IPC_CHANNELS.create, contentRequest('content-project-create', fields)),
+  getContentProject: (projectId) => ipcRenderer.invoke(CONTENT_IPC_CHANNELS.read, contentRequest('content-project-read', { projectId })),
+  updateContentProject: (fields) => ipcRenderer.invoke(CONTENT_IPC_CHANNELS.update, contentRequest('content-project-update', fields)),
+  archiveContentProject: (projectId, expectedStoreRevision) => ipcRenderer.invoke(CONTENT_IPC_CHANNELS.archive, contentRequest('content-project-archive', { projectId, expectedStoreRevision })),
   chooseAndImportMedia: () => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.chooseImport, MEDIA_CHOOSE_REQUEST),
   listMedia: () => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.list),
   attachMediaToProject: (request) => ipcRenderer.invoke(MEDIA_IPC_CHANNELS.attach, request),
